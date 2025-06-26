@@ -187,8 +187,469 @@ export interface IStorage {
   getBulkUploadSessions(collegeId: string): Promise<BulkUploadSession[]>;
   processBulkStudentData(sessionId: string, studentData: any[]): Promise<void>;
 
+  // Admin Control Panel Operations
+  getSystemConfigs(category?: string): Promise<any[]>;
+  createSystemConfig(config: any): Promise<any>;
+  updateSystemConfig(id: string, updates: any): Promise<any>;
+  deleteSystemConfig(id: string): Promise<boolean>;
+  
+  // CEFR Bulk Management
+  createCefrBulkSession(session: any): Promise<any>;
+  processCefrBulkUpload(sessionId: string, data: any[]): Promise<void>;
+  getCefrBulkSessions(collegeId?: string): Promise<any[]>;
+  
+  // Analytics & Reporting
+  recordUsageAnalytics(data: any): Promise<any>;
+  getUsageAnalytics(filters: any): Promise<any>;
+  getAnalyticsOverview(): Promise<any>;
+  getReportTemplates(accessLevel?: string): Promise<any[]>;
+  createReportTemplate(template: any): Promise<any>;
+  generateReport(templateId: string, filters: any): Promise<any>;
+  
+  // Content Moderation System
+  createContentModeration(moderation: any): Promise<any>;
+  getModerationQueue(filters?: any): Promise<any[]>;
+  updateModerationStatus(id: string, action: string, notes?: string): Promise<any>;
+  createModerationRule(rule: any): Promise<any>;
+  getModerationRules(): Promise<any[]>;
+  
+  // User Warnings & Reports
+  createUserWarning(warning: any): Promise<any>;
+  getUserWarnings(userId: string): Promise<any[]>;
+  createContentReport(report: any): Promise<any>;
+  getContentReports(status?: string): Promise<any[]>;
+  
+  // Admin Logs
+  logAdminAction(action: any): Promise<any>;
+  getAdminLogs(filters?: any): Promise<any[]>;
+
   // Seed data operations
   seedDatabase(): Promise<void>;
+}
+
+export class DatabaseStorage implements IStorage {
+  // User operations
+  async getUser(id: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user || undefined;
+  }
+
+  async createSystemConfig(config: any): Promise<any> {
+    const [created] = await db.insert(systemConfigs).values({
+      configKey: config.configKey,
+      configValue: config.configValue,
+      description: config.description,
+      category: config.category,
+      isPublic: config.isPublic || false,
+      collegeId: config.collegeId,
+      updatedBy: config.updatedBy
+    }).returning();
+    return created;
+  }
+
+  async updateSystemConfig(id: string, updates: any): Promise<any> {
+    const [updated] = await db
+      .update(systemConfigs)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(systemConfigs.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteSystemConfig(id: string): Promise<boolean> {
+    const result = await db.delete(systemConfigs).where(eq(systemConfigs.id, id));
+    return result.rowCount > 0;
+  }
+  
+  // CEFR Bulk Management
+  async createCefrBulkSession(session: any): Promise<any> {
+    const [created] = await db.insert(cefrBulkSessions).values({
+      uploadedBy: session.uploadedBy,
+      collegeId: session.collegeId,
+      fileName: session.fileName,
+      fileType: session.fileType,
+      totalRecords: session.totalRecords || 0,
+      status: 'pending'
+    }).returning();
+    return created;
+  }
+
+  async processCefrBulkUpload(sessionId: string, data: any[]): Promise<void> {
+    try {
+      await db.update(cefrBulkSessions)
+        .set({ status: 'processing', processedRecords: 0 })
+        .where(eq(cefrBulkSessions.id, sessionId));
+
+      let successCount = 0;
+      let failCount = 0;
+      const errors: any[] = [];
+      const successes: any[] = [];
+
+      for (const item of data) {
+        try {
+          // Find user by email or username
+          const [user] = await db.select().from(users)
+            .where(eq(users.email, item.email));
+
+          if (user) {
+            // Create or update video resume with CEFR level
+            await db.insert(videoResumes).values({
+              userId: user.id,
+              cefrLevel: item.cefrLevel,
+              cefrAssignedBy: data[0].assignedBy,
+              cefrAssignedAt: new Date(),
+              cefrNotes: item.notes
+            }).onConflictDoUpdate({
+              target: videoResumes.userId,
+              set: {
+                cefrLevel: item.cefrLevel,
+                cefrAssignedBy: data[0].assignedBy,
+                cefrAssignedAt: new Date(),
+                cefrNotes: item.notes
+              }
+            });
+
+            successCount++;
+            successes.push({ email: item.email, cefrLevel: item.cefrLevel });
+          } else {
+            failCount++;
+            errors.push({ email: item.email, error: 'User not found' });
+          }
+        } catch (error) {
+          failCount++;
+          errors.push({ email: item.email, error: error.message });
+        }
+      }
+
+      await db.update(cefrBulkSessions)
+        .set({
+          status: 'completed',
+          processedRecords: data.length,
+          successfulRecords: successCount,
+          failedRecords: failCount,
+          errorLog: errors,
+          successLog: successes,
+          completedAt: new Date()
+        })
+        .where(eq(cefrBulkSessions.id, sessionId));
+
+    } catch (error) {
+      await db.update(cefrBulkSessions)
+        .set({
+          status: 'failed',
+          errorLog: [{ error: error.message }]
+        })
+        .where(eq(cefrBulkSessions.id, sessionId));
+    }
+  }
+
+  async getCefrBulkSessions(collegeId?: string): Promise<any[]> {
+    const query = db.select({
+      id: cefrBulkSessions.id,
+      fileName: cefrBulkSessions.fileName,
+      fileType: cefrBulkSessions.fileType,
+      totalRecords: cefrBulkSessions.totalRecords,
+      processedRecords: cefrBulkSessions.processedRecords,
+      successfulRecords: cefrBulkSessions.successfulRecords,
+      failedRecords: cefrBulkSessions.failedRecords,
+      status: cefrBulkSessions.status,
+      createdAt: cefrBulkSessions.createdAt,
+      completedAt: cefrBulkSessions.completedAt,
+      uploader: {
+        firstName: users.firstName,
+        lastName: users.lastName
+      }
+    })
+    .from(cefrBulkSessions)
+    .leftJoin(users, eq(cefrBulkSessions.uploadedBy, users.id));
+
+    if (collegeId) {
+      return await query.where(eq(cefrBulkSessions.collegeId, collegeId))
+        .orderBy(desc(cefrBulkSessions.createdAt));
+    }
+
+    return await query.orderBy(desc(cefrBulkSessions.createdAt));
+  }
+  
+  // Analytics & Reporting
+  async recordUsageAnalytics(data: any): Promise<any> {
+    const [created] = await db.insert(usageAnalytics).values({
+      userId: data.userId,
+      collegeId: data.collegeId,
+      sessionId: data.sessionId,
+      eventType: data.eventType,
+      eventData: data.eventData,
+      duration: data.duration,
+      deviceType: data.deviceType,
+      browserInfo: data.browserInfo,
+      ipAddress: data.ipAddress,
+      pageUrl: data.pageUrl,
+      referrer: data.referrer
+    }).returning();
+    return created;
+  }
+
+  async getUsageAnalytics(filters: any): Promise<any> {
+    const baseQuery = db.select().from(usageAnalytics);
+    
+    // Apply filters based on date range, college, user, etc.
+    let query = baseQuery;
+    
+    if (filters.collegeId) {
+      query = query.where(eq(usageAnalytics.collegeId, filters.collegeId));
+    }
+    
+    if (filters.startDate && filters.endDate) {
+      query = query.where(
+        and(
+          gte(usageAnalytics.createdAt, new Date(filters.startDate)),
+          lte(usageAnalytics.createdAt, new Date(filters.endDate))
+        )
+      );
+    }
+    
+    return await query.orderBy(desc(usageAnalytics.createdAt));
+  }
+
+  async getAnalyticsOverview(): Promise<any> {
+    // Get basic stats across the platform
+    const totalUsersResult = await db.select({ count: count() }).from(users);
+    const totalCollegesResult = await db.select({ count: count() }).from(colleges);
+    
+    // Active sessions in last 24 hours
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    
+    const activeSessionsResult = await db.select({ count: count() })
+      .from(usageAnalytics)
+      .where(gte(usageAnalytics.createdAt, yesterday));
+
+    return {
+      totalUsers: totalUsersResult[0]?.count || 0,
+      totalColleges: totalCollegesResult[0]?.count || 0,
+      activeSessions: activeSessionsResult[0]?.count || 0
+    };
+  }
+
+  async getReportTemplates(accessLevel?: string): Promise<any[]> {
+    const query = db.select().from(reportTemplates).where(eq(reportTemplates.isActive, true));
+    
+    if (accessLevel) {
+      return await query.where(eq(reportTemplates.accessLevel, accessLevel))
+        .orderBy(reportTemplates.sortOrder);
+    }
+    
+    return await query.orderBy(reportTemplates.sortOrder);
+  }
+
+  async createReportTemplate(template: any): Promise<any> {
+    const [created] = await db.insert(reportTemplates).values({
+      name: template.name,
+      description: template.description,
+      category: template.category,
+      chartType: template.chartType,
+      dataSource: template.dataSource,
+      query: template.query,
+      filters: template.filters,
+      visualization: template.visualization,
+      accessLevel: template.accessLevel,
+      createdBy: template.createdBy
+    }).returning();
+    return created;
+  }
+
+  async generateReport(templateId: string, filters: any): Promise<any> {
+    // This would execute the template query with filters and return formatted data
+    const [template] = await db.select().from(reportTemplates)
+      .where(eq(reportTemplates.id, templateId));
+    
+    if (!template) throw new Error('Report template not found');
+    
+    // Execute the template query (simplified version)
+    // In production, this would use a query builder with the template.query
+    return {
+      templateId,
+      generatedAt: new Date(),
+      data: [], // Query results would go here
+      filters
+    };
+  }
+  
+  // Content Moderation System
+  async createContentModeration(moderation: any): Promise<any> {
+    const [created] = await db.insert(contentModerations).values({
+      contentType: moderation.contentType,
+      contentId: moderation.contentId,
+      userId: moderation.userId,
+      moderationType: moderation.moderationType,
+      flaggedReason: moderation.flaggedReason,
+      autoModerationScore: moderation.autoModerationScore,
+      autoModerationDetails: moderation.autoModerationDetails,
+      reportedBy: moderation.reportedBy,
+      reportReason: moderation.reportReason,
+      reportDescription: moderation.reportDescription,
+      priority: moderation.priority || 'medium'
+    }).returning();
+    return created;
+  }
+
+  async getModerationQueue(filters?: any): Promise<any[]> {
+    let query = db.select({
+      id: contentModerations.id,
+      contentType: contentModerations.contentType,
+      contentId: contentModerations.contentId,
+      moderationType: contentModerations.moderationType,
+      status: contentModerations.status,
+      flaggedReason: contentModerations.flaggedReason,
+      reportReason: contentModerations.reportReason,
+      reportDescription: contentModerations.reportDescription,
+      autoModerationScore: contentModerations.autoModerationScore,
+      priority: contentModerations.priority,
+      createdAt: contentModerations.createdAt,
+      reporter: {
+        firstName: users.firstName,
+        lastName: users.lastName
+      }
+    })
+    .from(contentModerations)
+    .leftJoin(users, eq(contentModerations.reportedBy, users.id));
+
+    if (filters?.status) {
+      query = query.where(eq(contentModerations.status, filters.status));
+    } else {
+      query = query.where(eq(contentModerations.status, 'pending'));
+    }
+
+    return await query.orderBy(desc(contentModerations.createdAt));
+  }
+
+  async updateModerationStatus(id: string, action: string, notes?: string): Promise<any> {
+    const [updated] = await db
+      .update(contentModerations)
+      .set({
+        status: action === 'approved' ? 'approved' : 'rejected',
+        actionTaken: action,
+        moderatorNotes: notes,
+        resolvedAt: new Date()
+      })
+      .where(eq(contentModerations.id, id))
+      .returning();
+    return updated;
+  }
+
+  async createModerationRule(rule: any): Promise<any> {
+    const [created] = await db.insert(moderationRules).values({
+      ruleType: rule.ruleType,
+      category: rule.category,
+      rule: rule.rule,
+      severity: rule.severity,
+      action: rule.action,
+      confidenceThreshold: rule.confidenceThreshold,
+      createdBy: rule.createdBy
+    }).returning();
+    return created;
+  }
+
+  async getModerationRules(): Promise<any[]> {
+    return await db.select().from(moderationRules)
+      .where(eq(moderationRules.isActive, true))
+      .orderBy(moderationRules.category, moderationRules.severity);
+  }
+  
+  // User Warnings & Reports
+  async createUserWarning(warning: any): Promise<any> {
+    const [created] = await db.insert(userWarnings).values({
+      userId: warning.userId,
+      moderatorId: warning.moderatorId,
+      warningType: warning.warningType,
+      reason: warning.reason,
+      contentId: warning.contentId,
+      severity: warning.severity,
+      actionTaken: warning.actionTaken,
+      restrictionDetails: warning.restrictionDetails,
+      expiresAt: warning.expiresAt
+    }).returning();
+    return created;
+  }
+
+  async getUserWarnings(userId: string): Promise<any[]> {
+    return await db.select().from(userWarnings)
+      .where(and(eq(userWarnings.userId, userId), eq(userWarnings.isActive, true)))
+      .orderBy(desc(userWarnings.createdAt));
+  }
+
+  async createContentReport(report: any): Promise<any> {
+    const [created] = await db.insert(contentReports).values({
+      contentType: report.contentType,
+      contentId: report.contentId,
+      reportedBy: report.reportedBy,
+      reportReason: report.reportReason,
+      description: report.description,
+      evidence: report.evidence
+    }).returning();
+    return created;
+  }
+
+  async getContentReports(status?: string): Promise<any[]> {
+    const query = db.select({
+      id: contentReports.id,
+      contentType: contentReports.contentType,
+      contentId: contentReports.contentId,
+      reportReason: contentReports.reportReason,
+      description: contentReports.description,
+      status: contentReports.status,
+      createdAt: contentReports.createdAt,
+      reporter: {
+        firstName: users.firstName,
+        lastName: users.lastName
+      }
+    })
+    .from(contentReports)
+    .leftJoin(users, eq(contentReports.reportedBy, users.id));
+
+    if (status) {
+      return await query.where(eq(contentReports.status, status))
+        .orderBy(desc(contentReports.createdAt));
+    }
+
+    return await query.orderBy(desc(contentReports.createdAt));
+  }
+  
+  // Admin Logs
+  async logAdminAction(action: any): Promise<any> {
+    const [created] = await db.insert(adminLogs).values({
+      adminId: action.adminId,
+      collegeId: action.collegeId,
+      actionType: action.actionType,
+      targetType: action.targetType,
+      targetId: action.targetId,
+      details: action.details
+    }).returning();
+    return created;
+  }
+
+  async getAdminLogs(filters?: any): Promise<any[]> {
+    let query = db.select({
+      id: adminLogs.id,
+      actionType: adminLogs.actionType,
+      targetType: adminLogs.targetType,
+      targetId: adminLogs.targetId,
+      details: adminLogs.details,
+      createdAt: adminLogs.createdAt,
+      admin: {
+        firstName: users.firstName,
+        lastName: users.lastName
+      }
+    })
+    .from(adminLogs)
+    .leftJoin(users, eq(adminLogs.adminId, users.id));
+
+    if (filters?.collegeId) {
+      query = query.where(eq(adminLogs.collegeId, filters.collegeId));
+    }
+
+    return await query.orderBy(desc(adminLogs.createdAt)).limit(100);
+  }
 }
 
 // Database storage implementation

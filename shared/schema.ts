@@ -406,6 +406,146 @@ export const adminLogs = pgTable("admin_logs", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// System Configuration Management for Admin Control Panel
+export const systemConfigs = pgTable("system_configs", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  configKey: varchar("config_key", { length: 100 }).unique().notNull(),
+  configValue: jsonb("config_value").notNull(),
+  description: text("description"),
+  category: varchar("category", { length: 50 }).notNull(), // theme, features, content, design
+  isPublic: boolean("is_public").default(false),
+  collegeId: uuid("college_id"), // null for global configs
+  updatedBy: uuid("updated_by").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow()
+});
+
+// CEFR Bulk Upload Sessions for Admin/Master Trainer
+export const cefrBulkSessions = pgTable("cefr_bulk_sessions", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  uploadedBy: uuid("uploaded_by").notNull(),
+  collegeId: uuid("college_id"),
+  fileName: varchar("file_name", { length: 255 }).notNull(),
+  fileType: varchar("file_type", { length: 10 }).notNull(), // csv, xlsx
+  totalRecords: integer("total_records").default(0),
+  processedRecords: integer("processed_records").default(0),
+  successfulRecords: integer("successful_records").default(0),
+  failedRecords: integer("failed_records").default(0),
+  status: varchar("status", { length: 20 }).default("pending"), // pending, processing, completed, failed
+  errorLog: jsonb("error_log"),
+  successLog: jsonb("success_log"),
+  validationErrors: jsonb("validation_errors"),
+  createdAt: timestamp("created_at").defaultNow(),
+  completedAt: timestamp("completed_at")
+});
+
+// Analytics & Usage Tracking for Smart Reports
+export const usageAnalytics = pgTable("usage_analytics", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id"),
+  collegeId: uuid("college_id").notNull(),
+  sessionId: varchar("session_id", { length: 100 }),
+  eventType: varchar("event_type", { length: 50 }).notNull(), // login, practice_start, video_upload, chat_message, etc
+  eventData: jsonb("event_data"),
+  duration: integer("duration"), // in seconds
+  deviceType: varchar("device_type", { length: 20 }), // mobile, desktop, tablet
+  browserInfo: varchar("browser_info", { length: 100 }),
+  ipAddress: varchar("ip_address", { length: 45 }),
+  pageUrl: varchar("page_url", { length: 255 }),
+  referrer: varchar("referrer", { length: 255 }),
+  createdAt: timestamp("created_at").defaultNow()
+});
+
+// Report Templates for Dashboard Analytics
+export const reportTemplates = pgTable("report_templates", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  name: varchar("name", { length: 100 }).notNull(),
+  description: text("description"),
+  category: varchar("category", { length: 50 }).notNull(), // usage, engagement, performance, cefr_distribution
+  chartType: varchar("chart_type", { length: 30 }).notNull(), // line, bar, pie, heatmap, treemap
+  dataSource: varchar("data_source", { length: 50 }).notNull(),
+  query: text("query"), // SQL query template
+  filters: jsonb("filters"),
+  visualization: jsonb("visualization"),
+  accessLevel: varchar("access_level", { length: 20 }).default("college"), // college, super_admin
+  isActive: boolean("is_active").default(true),
+  sortOrder: integer("sort_order").default(0),
+  createdBy: uuid("created_by").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow()
+});
+
+// Content Moderation System with Free APIs
+export const contentModerations = pgTable("content_moderations", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  contentType: varchar("content_type", { length: 50 }).notNull(), // post, comment, video, file, chat_message
+  contentId: uuid("content_id").notNull(),
+  userId: uuid("user_id"),
+  moderationType: varchar("moderation_type", { length: 30 }).notNull(), // auto, manual, reported
+  status: varchar("status", { length: 20 }).default("pending"), // pending, approved, rejected, flagged, escalated
+  flaggedReason: varchar("flagged_reason", { length: 100 }),
+  moderatorId: uuid("moderator_id"),
+  moderatorNotes: text("moderator_notes"),
+  autoModerationScore: real("auto_moderation_score"),
+  autoModerationDetails: jsonb("auto_moderation_details"), // API response details
+  reportedBy: uuid("reported_by"),
+  reportReason: varchar("report_reason", { length: 100 }),
+  reportDescription: text("report_description"),
+  actionTaken: varchar("action_taken", { length: 50 }), // none, warning, content_removed, user_suspended
+  priority: varchar("priority", { length: 20 }).default("medium"), // low, medium, high, critical
+  createdAt: timestamp("created_at").defaultNow(),
+  resolvedAt: timestamp("resolved_at")
+});
+
+// Moderation Rules Configuration
+export const moderationRules = pgTable("moderation_rules", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  ruleType: varchar("rule_type", { length: 50 }).notNull(), // keyword_filter, text_classifier, image_classifier
+  category: varchar("category", { length: 50 }).notNull(), // spam, inappropriate, hate_speech, violence
+  rule: jsonb("rule").notNull(), // contains keywords, patterns, or API config
+  severity: varchar("severity", { length: 20 }).default("medium"), // low, medium, high, critical
+  action: varchar("action", { length: 30 }).default("flag"), // flag, auto_remove, warn_user, escalate
+  isActive: boolean("is_active").default(true),
+  confidenceThreshold: real("confidence_threshold").default(0.7),
+  createdBy: uuid("created_by").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow()
+});
+
+// User Warnings & Sanctions Management
+export const userWarnings = pgTable("user_warnings", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id").notNull(),
+  moderatorId: uuid("moderator_id").notNull(),
+  warningType: varchar("warning_type", { length: 30 }).notNull(), // content_violation, behavior, spam, harassment
+  reason: text("reason").notNull(),
+  contentId: uuid("content_id"), // reference to flagged content
+  severity: varchar("severity", { length: 20 }).default("low"), // low, medium, high, critical
+  actionTaken: varchar("action_taken", { length: 50 }), // warning, content_removal, temporary_suspension, permanent_ban
+  restrictionDetails: jsonb("restriction_details"), // specific restrictions applied
+  expiresAt: timestamp("expires_at"),
+  isActive: boolean("is_active").default(true),
+  userNotified: boolean("user_notified").default(false),
+  createdAt: timestamp("created_at").defaultNow()
+});
+
+// Content Reports from Users
+export const contentReports = pgTable("content_reports", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  contentType: varchar("content_type", { length: 50 }).notNull(),
+  contentId: uuid("content_id").notNull(),
+  reportedBy: uuid("reported_by").notNull(),
+  reportReason: varchar("report_reason", { length: 50 }).notNull(), // spam, inappropriate, harassment, fake_content
+  description: text("description"),
+  evidence: jsonb("evidence"), // screenshots, additional context
+  status: varchar("status", { length: 20 }).default("pending"), // pending, reviewing, resolved, dismissed
+  reviewedBy: uuid("reviewed_by"),
+  reviewNotes: text("review_notes"),
+  actionTaken: varchar("action_taken", { length: 50 }),
+  createdAt: timestamp("created_at").defaultNow(),
+  reviewedAt: timestamp("reviewed_at")
+});
+
 // Relations
 export const collegesRelations = relations(colleges, ({ many }) => ({
   users: many(users),
@@ -631,6 +771,91 @@ export const adminLogsRelations = relations(adminLogs, ({ one }) => ({
   college: one(colleges, {
     fields: [adminLogs.collegeId],
     references: [colleges.id],
+  }),
+}));
+
+// New table relations for Admin Control Panel
+export const systemConfigsRelations = relations(systemConfigs, ({ one }) => ({
+  updatedBy: one(users, {
+    fields: [systemConfigs.updatedBy],
+    references: [users.id],
+  }),
+  college: one(colleges, {
+    fields: [systemConfigs.collegeId],
+    references: [colleges.id],
+  }),
+}));
+
+export const cefrBulkSessionsRelations = relations(cefrBulkSessions, ({ one }) => ({
+  uploader: one(users, {
+    fields: [cefrBulkSessions.uploadedBy],
+    references: [users.id],
+  }),
+  college: one(colleges, {
+    fields: [cefrBulkSessions.collegeId],
+    references: [colleges.id],
+  }),
+}));
+
+export const usageAnalyticsRelations = relations(usageAnalytics, ({ one }) => ({
+  user: one(users, {
+    fields: [usageAnalytics.userId],
+    references: [users.id],
+  }),
+  college: one(colleges, {
+    fields: [usageAnalytics.collegeId],
+    references: [colleges.id],
+  }),
+}));
+
+export const reportTemplatesRelations = relations(reportTemplates, ({ one }) => ({
+  creator: one(users, {
+    fields: [reportTemplates.createdBy],
+    references: [users.id],
+  }),
+}));
+
+export const contentModerationsRelations = relations(contentModerations, ({ one }) => ({
+  user: one(users, {
+    fields: [contentModerations.userId],
+    references: [users.id],
+  }),
+  moderator: one(users, {
+    fields: [contentModerations.moderatorId],
+    references: [users.id],
+  }),
+  reporter: one(users, {
+    fields: [contentModerations.reportedBy],
+    references: [users.id],
+  }),
+}));
+
+export const moderationRulesRelations = relations(moderationRules, ({ one }) => ({
+  creator: one(users, {
+    fields: [moderationRules.createdBy],
+    references: [users.id],
+  }),
+}));
+
+export const userWarningsRelations = relations(userWarnings, ({ one }) => ({
+  user: one(users, {
+    fields: [userWarnings.userId],
+    references: [users.id],
+  }),
+  moderator: one(users, {
+    fields: [userWarnings.moderatorId],
+    references: [users.id],
+  }),
+}));
+
+export const contentReportsRelations = relations(contentReports, ({ one }) => ({
+  reporter: one(users, {
+    fields: [contentReports.reportedBy],
+    references: [users.id],
+  }),
+  reviewer: one(users, {
+    fields: [contentReports.reviewedBy],
+    references: [users.id],
   }),
 }));
 
