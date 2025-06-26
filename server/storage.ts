@@ -639,9 +639,7 @@ export class DatabaseStorage implements IStorage {
 
     return await query.orderBy(desc(adminLogs.createdAt)).limit(100);
   }
-}
 
-export class DatabaseStorage implements IStorage {
   // Admin Control Panel Operations
   async getSystemConfigs(category?: string): Promise<any[]> {
     return [

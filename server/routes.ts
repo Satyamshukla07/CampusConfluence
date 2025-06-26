@@ -892,6 +892,103 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Admin Control Panel Routes
+  app.get("/api/admin/system-configs", async (req, res) => {
+    try {
+      const { category } = req.query;
+      const configs = await storage.getSystemConfigs(category as string);
+      res.json(configs);
+    } catch (error) {
+      console.error("Error fetching system configs:", error);
+      res.status(500).json({ message: "Failed to fetch system configurations" });
+    }
+  });
+
+  app.post("/api/admin/system-configs", async (req, res) => {
+    try {
+      const config = await storage.createSystemConfig(req.body);
+      res.json(config);
+    } catch (error) {
+      console.error("Error creating system config:", error);
+      res.status(500).json({ message: "Failed to create system configuration" });
+    }
+  });
+
+  app.get("/api/admin/analytics/overview", async (req, res) => {
+    try {
+      const overview = await storage.getAnalyticsOverview();
+      res.json(overview);
+    } catch (error) {
+      console.error("Error fetching analytics overview:", error);
+      res.status(500).json({ message: "Failed to fetch analytics overview" });
+    }
+  });
+
+  app.get("/api/admin/analytics/usage", async (req, res) => {
+    try {
+      const filters = req.query;
+      const analytics = await storage.getUsageAnalytics(filters);
+      res.json(analytics);
+    } catch (error) {
+      console.error("Error fetching usage analytics:", error);
+      res.status(500).json({ message: "Failed to fetch usage analytics" });
+    }
+  });
+
+  app.post("/api/admin/cefr-bulk-upload", async (req, res) => {
+    try {
+      const session = await storage.createCefrBulkSession(req.body);
+      res.json(session);
+    } catch (error) {
+      console.error("Error creating CEFR bulk upload session:", error);
+      res.status(500).json({ message: "Failed to create bulk upload session" });
+    }
+  });
+
+  app.get("/api/admin/cefr-bulk-sessions", async (req, res) => {
+    try {
+      const { collegeId } = req.query;
+      const sessions = await storage.getCefrBulkSessions(collegeId as string);
+      res.json(sessions);
+    } catch (error) {
+      console.error("Error fetching CEFR bulk sessions:", error);
+      res.status(500).json({ message: "Failed to fetch bulk upload sessions" });
+    }
+  });
+
+  app.get("/api/admin/moderation/queue", async (req, res) => {
+    try {
+      const filters = req.query;
+      const queue = await storage.getModerationQueue(filters);
+      res.json(queue);
+    } catch (error) {
+      console.error("Error fetching moderation queue:", error);
+      res.status(500).json({ message: "Failed to fetch moderation queue" });
+    }
+  });
+
+  app.post("/api/admin/moderation/:id/action", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { action, notes } = req.body;
+      const result = await storage.updateModerationStatus(id, action, notes);
+      res.json(result);
+    } catch (error) {
+      console.error("Error updating moderation status:", error);
+      res.status(500).json({ message: "Failed to update moderation status" });
+    }
+  });
+
+  app.post("/api/admin/analytics/record", async (req, res) => {
+    try {
+      const analytics = await storage.recordUsageAnalytics(req.body);
+      res.json(analytics);
+    } catch (error) {
+      console.error("Error recording analytics:", error);
+      res.status(500).json({ message: "Failed to record analytics" });
+    }
+  });
+
   // Seed database endpoint
   app.post("/api/seed", async (req, res) => {
     try {
