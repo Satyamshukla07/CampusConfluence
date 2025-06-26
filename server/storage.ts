@@ -90,6 +90,9 @@ export interface IStorage {
   // Video resume operations
   getVideoResumes(userId: string): Promise<VideoResume[]>;
   createVideoResume(resume: any): Promise<VideoResume>;
+
+  // Seed data operations
+  seedDatabase(): Promise<void>;
 }
 
 // Database storage implementation
@@ -147,7 +150,7 @@ export class DatabaseStorage implements IStorage {
     return user;
   }
 
-  async updateUserProgress(userId: string, scores: { speaking?: number; writing?: number; reading?: number }): Promise<User | undefined> {
+  async updateUserScores(userId: string, scores: { speaking?: number; writing?: number; reading?: number }): Promise<User | undefined> {
     const updateData: any = { updatedAt: new Date() };
     if (scores.speaking !== undefined) updateData.speakingScore = scores.speaking;
     if (scores.writing !== undefined) updateData.writingScore = scores.writing;
@@ -326,6 +329,102 @@ export class DatabaseStorage implements IStorage {
   async createVideoResume(resume: any): Promise<VideoResume> {
     const [videoResume] = await db.insert(videoResumes).values(resume).returning();
     return videoResume;
+  }
+
+  // Seed database with sample data
+  async seedDatabase(): Promise<void> {
+    try {
+      // Create sample college
+      const [college] = await db.insert(colleges).values({
+        name: "Delhi University",
+        domain: "du.ac.in",
+        isActive: true
+      }).returning();
+
+      // Create sample users
+      const [student] = await db.insert(users).values({
+        collegeId: college.id,
+        username: "arjun_student",
+        email: "arjun@du.ac.in",
+        password: "password123",
+        firstName: "Arjun",
+        lastName: "Kumar",
+        role: "student",
+        englishLevel: "intermediate",
+        speakingScore: 75,
+        writingScore: 82,
+        readingScore: 88,
+        practiceHours: 45,
+        streak: 7,
+        isActive: true
+      }).returning();
+
+      const [recruiter] = await db.insert(users).values({
+        collegeId: college.id,
+        username: "recruiter_tech",
+        email: "hiring@techcorp.com",
+        password: "password123",
+        firstName: "Priya",
+        lastName: "Sharma",
+        role: "recruiter",
+        englishLevel: "advanced",
+        speakingScore: 95,
+        writingScore: 92,
+        readingScore: 96,
+        practiceHours: 0,
+        streak: 0,
+        isActive: true
+      }).returning();
+
+      // Create practice modules
+      const [practiceModule] = await db.insert(practiceModules).values({
+        collegeId: college.id,
+        title: "Business English Conversation",
+        description: "Practice professional conversations for workplace scenarios",
+        type: "speaking",
+        difficulty: "intermediate",
+        duration: 30,
+        exercises: [
+          { type: "conversation", topic: "presentation" },
+          { type: "conversation", topic: "meeting" },
+          { type: "conversation", topic: "negotiation" }
+        ],
+        createdBy: student.id,
+        isActive: true
+      }).returning();
+
+      // Create study group
+      const [studyGroup] = await db.insert(studyGroups).values({
+        collegeId: college.id,
+        name: "Speaking Practice Circle",
+        description: "Daily speaking practice sessions for intermediate learners",
+        type: "speaking",
+        memberCount: 1,
+        maxMembers: 8,
+        isActive: true,
+        nextSession: new Date(Date.now() + 24 * 60 * 60 * 1000),
+        createdBy: student.id
+      }).returning();
+
+      // Create job posting
+      await db.insert(jobPostings).values({
+        collegeId: college.id,
+        title: "Junior Software Developer",
+        company: "TechCorp Solutions",
+        description: "Looking for fresh graduates with strong English communication skills for our development team.",
+        location: "Bangalore, India",
+        salary: "₹4-6 LPA",
+        careerPath: "technology",
+        experienceLevel: "entry",
+        requirements: ["Strong communication skills", "Problem-solving", "Team collaboration", "Technical aptitude"],
+        recruiterId: recruiter.id,
+        isActive: true
+      });
+
+      console.log("Database seeded successfully with sample data");
+    } catch (error) {
+      console.error("Error seeding database:", error);
+    }
   }
 }
 

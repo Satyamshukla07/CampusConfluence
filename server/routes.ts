@@ -288,6 +288,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Seed database endpoint
+  app.post("/api/seed", async (req, res) => {
+    try {
+      await storage.seedDatabase();
+      res.json({ message: "Database seeded successfully" });
+    } catch (error) {
+      console.error("Error seeding database:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

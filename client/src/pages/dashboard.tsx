@@ -13,12 +13,20 @@ export default function Dashboard() {
   const [selectedModule, setSelectedModule] = useState<any>(null);
   const [showPracticeModal, setShowPracticeModal] = useState(false);
 
-  // Mock user data - in real app, get from auth context
+  // Get colleges and set current college context
+  const { data: colleges } = useQuery({
+    queryKey: ["/api/colleges"],
+  });
+
+  const currentCollege = colleges?.[0]; // Use first college for demo
+  
+  // Mock user data - in real app, get from auth context with actual UUID
   const currentUser = {
-    id: 1,
+    id: "550e8400-e29b-41d4-a716-446655440000", // Mock UUID for demo
     firstName: "Arjun",
     lastName: "Kumar",
-    college: "Delhi University",
+    college: currentCollege?.name || "Delhi University",
+    collegeId: currentCollege?.id,
     englishLevel: "intermediate",
     practiceHours: 24,
     streak: 7,
@@ -29,18 +37,31 @@ export default function Dashboard() {
 
   const { data: practiceModules } = useQuery({
     queryKey: ["/api/practice-modules"],
+    queryFn: () => 
+      fetch(`/api/practice-modules?collegeId=${currentUser.collegeId}`)
+        .then(res => res.json()),
+    enabled: !!currentUser.collegeId,
   });
 
   const { data: userProgress } = useQuery({
     queryKey: [`/api/users/${currentUser.id}/progress`],
+    enabled: !!currentUser.id,
   });
 
   const { data: studyGroups } = useQuery({
     queryKey: ["/api/study-groups"],
+    queryFn: () => 
+      fetch(`/api/study-groups?collegeId=${currentUser.collegeId}`)
+        .then(res => res.json()),
+    enabled: !!currentUser.collegeId,
   });
 
   const { data: jobPostings } = useQuery({
-    queryKey: ["/api/jobs"],
+    queryKey: ["/api/job-postings"],
+    queryFn: () => 
+      fetch(`/api/job-postings?collegeId=${currentUser.collegeId}`)
+        .then(res => res.json()),
+    enabled: !!currentUser.collegeId,
   });
 
   const handleSidebarAction = (action: string) => {
