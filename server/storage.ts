@@ -7,8 +7,16 @@ import {
   studyGroupMembers,
   jobPostings,
   jobApplications,
+  chatGroups,
+  chatGroupMembers,
   chatMessages,
+  forumCategories,
   forumPosts,
+  forumReplies,
+  rssFeeds,
+  rssFeedItems,
+  sharedFiles,
+  grammarCorrections,
   videoResumes,
   type College,
   type InsertCollege,
@@ -78,14 +86,58 @@ export interface IStorage {
   createApplication(jobId: string, userId: string): Promise<JobApplication>;
   getApplicationsForJob(jobId: string): Promise<JobApplication[]>;
 
-  // Chat message operations
-  getMessages(userId: string, collegeId: string): Promise<ChatMessage[]>;
-  createMessage(message: InsertChatMessage): Promise<ChatMessage>;
-  getConversation(user1Id: string, user2Id: string): Promise<ChatMessage[]>;
+  // Enhanced chat group operations
+  getChatGroups(collegeId: string, type?: string): Promise<any[]>;
+  getChatGroup(id: string): Promise<any | undefined>;
+  createChatGroup(group: any): Promise<any>;
+  updateChatGroup(id: string, updates: any): Promise<any | undefined>;
+  deleteChatGroup(id: string, userId: string): Promise<boolean>;
+  joinChatGroup(groupId: string, userId: string): Promise<any>;
+  leaveChatGroup(groupId: string, userId: string): Promise<boolean>;
+  getChatGroupMembers(groupId: string): Promise<any[]>;
+  getUserChatGroups(userId: string): Promise<any[]>;
 
-  // Forum operations
-  getForumPosts(collegeId: string): Promise<ForumPost[]>;
+  // Enhanced messaging operations with grammar correction
+  getMessages(groupId?: string, userId?: string, collegeId?: string): Promise<ChatMessage[]>;
+  createMessage(message: InsertChatMessage): Promise<ChatMessage>;
+  updateMessage(id: string, updates: any): Promise<ChatMessage | undefined>;
+  deleteMessage(id: string, userId: string): Promise<boolean>;
+  getConversation(user1Id: string, user2Id: string): Promise<ChatMessage[]>;
+  processGrammarCorrection(text: string, userId: string): Promise<any>;
+
+  // RSS feed operations
+  getRssFeeds(collegeId: string): Promise<any[]>;
+  createRssFeed(feed: any): Promise<any>;
+  updateRssFeed(id: string, updates: any): Promise<any | undefined>;
+  deleteRssFeed(id: string): Promise<boolean>;
+  approveRssFeed(id: string, adminId: string): Promise<any | undefined>;
+  getRssFeedItems(feedId: string): Promise<any[]>;
+  createRssFeedItem(item: any): Promise<any>;
+  approveRssFeedItem(id: string, adminId: string): Promise<any | undefined>;
+
+  // Enhanced forum operations
+  getForumCategories(collegeId: string): Promise<any[]>;
+  createForumCategory(category: any): Promise<any>;
+  getForumPosts(collegeId: string, categoryId?: string, groupId?: string): Promise<ForumPost[]>;
+  getForumPost(id: string): Promise<ForumPost | undefined>;
   createForumPost(post: any): Promise<ForumPost>;
+  updateForumPost(id: string, updates: any): Promise<ForumPost | undefined>;
+  deleteForumPost(id: string, userId: string): Promise<boolean>;
+  getForumReplies(postId: string): Promise<any[]>;
+  createForumReply(reply: any): Promise<any>;
+  updateForumReply(id: string, updates: any): Promise<any | undefined>;
+  deleteForumReply(id: string, userId: string): Promise<boolean>;
+
+  // File sharing operations
+  uploadFile(fileData: any): Promise<any>;
+  getFile(id: string): Promise<any | undefined>;
+  deleteFile(id: string, userId: string): Promise<boolean>;
+  getUserFiles(userId: string): Promise<any[]>;
+  cleanupExpiredFiles(): Promise<number>;
+
+  // Grammar correction operations
+  saveGrammarCorrection(correction: any): Promise<any>;
+  getGrammarHistory(userId: string): Promise<any[]>;
 
   // Video resume operations
   getVideoResumes(userId: string): Promise<VideoResume[]>;

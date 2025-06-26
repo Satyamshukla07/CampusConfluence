@@ -97,32 +97,128 @@ export const studyGroupMembers = pgTable("study_group_members", {
   joinedAt: timestamp("joined_at").defaultNow(),
 });
 
-// Chat messages between users
-export const chatMessages = pgTable("chat_messages", {
+// Enhanced chat system with forums and groups
+export const chatGroups = pgTable("chat_groups", {
   id: uuid("id").primaryKey().defaultRandom(),
   collegeId: uuid("college_id").notNull(),
-  senderId: uuid("sender_id").notNull(),
-  receiverId: uuid("receiver_id"),
-  groupId: uuid("group_id"), // for group chats
-  content: text("content").notNull(),
-  messageType: text("message_type").notNull().default("text"), // text, image, video, audio
-  isRead: boolean("is_read").notNull().default(false),
-  sentAt: timestamp("sent_at").defaultNow(),
+  name: text("name").notNull(),
+  description: text("description"),
+  type: text("type").notNull(), // central_forum, community_forum, private_group, direct_message
+  category: text("category"), // general, practice, career, study_group, etc.
+  creatorId: uuid("creator_id").notNull(),
+  isPrivate: boolean("is_private").notNull().default(false),
+  maxMembers: integer("max_members").default(100),
+  memberCount: integer("member_count").notNull().default(1),
+  isActive: boolean("is_active").notNull().default(true),
+  allowFileSharing: boolean("allow_file_sharing").notNull().default(true),
+  allowInvites: boolean("allow_invites").notNull().default(true),
+  autoDeleteFiles: boolean("auto_delete_files").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
-// Forum posts for discussions
+export const chatGroupMembers = pgTable("chat_group_members", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  groupId: uuid("group_id").notNull(),
+  userId: uuid("user_id").notNull(),
+  role: text("role").notNull().default("member"), // creator, admin, moderator, member
+  joinedAt: timestamp("joined_at").defaultNow(),
+  lastReadAt: timestamp("last_read_at").defaultNow(),
+});
+
+export const chatMessages = pgTable("chat_messages", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  senderId: uuid("sender_id").notNull(),
+  receiverId: uuid("receiver_id"), // null for group messages
+  groupId: uuid("group_id"), // null for direct messages
+  collegeId: uuid("college_id").notNull(),
+  content: text("content").notNull(),
+  originalContent: text("original_content"), // before grammar correction
+  correctedContent: text("corrected_content"), // after grammar correction
+  grammarSuggestions: json("grammar_suggestions").default('[]'), // LanguageTool suggestions
+  messageType: text("message_type").notNull().default("text"), // text, image, audio, video, file, youtube_embed
+  fileUrl: text("file_url"), // for media messages
+  fileName: text("file_name"), // original file name
+  fileSize: integer("file_size"), // in bytes
+  fileMimeType: text("file_mime_type"), // MIME type
+  youtubeUrl: text("youtube_url"), // extracted YouTube URL
+  youtubeVideoId: text("youtube_video_id"), // extracted video ID
+  expiresAt: timestamp("expires_at"), // for auto-deletion (24 hours)
+  isEdited: boolean("is_edited").notNull().default(false),
+  replyToId: uuid("reply_to_id"), // for threaded conversations
+  isSystemMessage: boolean("is_system_message").notNull().default(false),
+  sentAt: timestamp("sent_at").defaultNow(),
+  readAt: timestamp("read_at"),
+  deletedAt: timestamp("deleted_at"),
+});
+
+// RSS feed integration
+export const rssFeeds = pgTable("rss_feeds", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  collegeId: uuid("college_id").notNull(),
+  name: text("name").notNull(),
+  url: text("url").notNull(),
+  description: text("description"),
+  category: text("category").notNull(), // news, blog, instagram, general
+  isActive: boolean("is_active").notNull().default(true),
+  isApproved: boolean("is_approved").notNull().default(false),
+  lastFetchedAt: timestamp("last_fetched_at"),
+  fetchInterval: integer("fetch_interval").notNull().default(3600), // seconds
+  addedBy: uuid("added_by").notNull(),
+  approvedBy: uuid("approved_by"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const rssFeedItems = pgTable("rss_feed_items", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  feedId: uuid("feed_id").notNull(),
+  title: text("title").notNull(),
+  description: text("description"),
+  content: text("content"),
+  url: text("url").notNull(),
+  imageUrl: text("image_url"),
+  publishedAt: timestamp("published_at"),
+  guid: text("guid").notNull(), // unique identifier from RSS
+  isApproved: boolean("is_approved").notNull().default(true),
+  discussionGroupId: uuid("discussion_group_id"), // auto-created discussion group
+  likesCount: integer("likes_count").notNull().default(0),
+  commentsCount: integer("comments_count").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Enhanced forum system
+export const forumCategories = pgTable("forum_categories", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  collegeId: uuid("college_id").notNull(),
+  name: text("name").notNull(),
+  description: text("description"),
+  icon: text("icon"),
+  color: text("color").default("#0079F2"),
+  order: integer("order").notNull().default(0),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 export const forumPosts = pgTable("forum_posts", {
   id: uuid("id").primaryKey().defaultRandom(),
   collegeId: uuid("college_id").notNull(),
+  categoryId: uuid("category_id"),
+  groupId: uuid("group_id"), // if posted in a group forum
   authorId: uuid("author_id").notNull(),
   title: text("title").notNull(),
   content: text("content").notNull(),
-  category: text("category").notNull(), // general, practice, career, tips
+  originalContent: text("original_content"), // before grammar correction
+  correctedContent: text("corrected_content"), // after grammar correction
+  grammarSuggestions: json("grammar_suggestions").default('[]'),
   tags: json("tags").notNull().default('[]'),
+  attachments: json("attachments").notNull().default('[]'), // file URLs and metadata
   likesCount: integer("likes_count").notNull().default(0),
   repliesCount: integer("replies_count").notNull().default(0),
+  viewsCount: integer("views_count").notNull().default(0),
   isSticky: boolean("is_sticky").notNull().default(false),
   isLocked: boolean("is_locked").notNull().default(false),
+  isPinned: boolean("is_pinned").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -132,9 +228,46 @@ export const forumReplies = pgTable("forum_replies", {
   postId: uuid("post_id").notNull(),
   authorId: uuid("author_id").notNull(),
   content: text("content").notNull(),
+  originalContent: text("original_content"), // before grammar correction
+  correctedContent: text("corrected_content"), // after grammar correction
+  grammarSuggestions: json("grammar_suggestions").default('[]'),
+  attachments: json("attachments").notNull().default('[]'),
   likesCount: integer("likes_count").notNull().default(0),
+  replyToId: uuid("reply_to_id"), // for nested replies
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// File management for auto-deletion
+export const sharedFiles = pgTable("shared_files", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  collegeId: uuid("college_id").notNull(),
+  uploaderId: uuid("uploader_id").notNull(),
+  fileName: text("file_name").notNull(),
+  originalName: text("original_name").notNull(),
+  filePath: text("file_path").notNull(),
+  fileSize: integer("file_size").notNull(),
+  mimeType: text("mime_type").notNull(),
+  fileType: text("file_type").notNull(), // image, audio, video, document
+  isTemporary: boolean("is_temporary").notNull().default(true), // auto-delete after 24h
+  expiresAt: timestamp("expires_at"),
+  downloadCount: integer("download_count").notNull().default(0),
+  isPublic: boolean("is_public").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Grammar correction service logs
+export const grammarCorrections = pgTable("grammar_corrections", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull(),
+  originalText: text("original_text").notNull(),
+  correctedText: text("corrected_text"),
+  suggestions: json("suggestions").notNull().default('[]'),
+  language: text("language").notNull().default("en"),
+  serviceUsed: text("service_used").notNull().default("languagetool"),
+  processingTime: integer("processing_time"), // milliseconds
+  isAccepted: boolean("is_accepted"), // did user accept the correction
+  createdAt: timestamp("created_at").defaultNow(),
 });
 
 // Video resumes with career tracking
@@ -219,9 +352,13 @@ export const collegesRelations = relations(colleges, ({ many }) => ({
   users: many(users),
   practiceModules: many(practiceModules),
   studyGroups: many(studyGroups),
+  chatGroups: many(chatGroups),
   chatMessages: many(chatMessages),
+  forumCategories: many(forumCategories),
   forumPosts: many(forumPosts),
   jobPostings: many(jobPostings),
+  rssFeeds: many(rssFeeds),
+  sharedFiles: many(sharedFiles),
 }));
 
 export const usersRelations = relations(users, ({ one, many }) => ({
@@ -233,6 +370,8 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   progress: many(userProgress),
   createdGroups: many(studyGroups),
   groupMemberships: many(studyGroupMembers),
+  createdChatGroups: many(chatGroups),
+  chatGroupMemberships: many(chatGroupMembers),
   sentMessages: many(chatMessages, { relationName: "sender" }),
   receivedMessages: many(chatMessages, { relationName: "receiver" }),
   forumPosts: many(forumPosts),
@@ -241,6 +380,9 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   jobApplications: many(jobApplications),
   recruiterActions: many(recruiterActions),
   adminLogs: many(adminLogs),
+  uploadedFiles: many(sharedFiles),
+  grammarCorrections: many(grammarCorrections),
+  addedRssFeeds: many(rssFeeds),
 }));
 
 export const practiceModulesRelations = relations(practiceModules, ({ one, many }) => ({
