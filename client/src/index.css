@@ -1,0 +1,88 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: hsl(248, 50%, 99%);
+  --foreground: hsl(30, 26%, 14%);
+  --muted: hsl(220, 14%, 96%);
+  --muted-foreground: hsl(220, 8%, 46%);
+  --popover: hsl(0, 0%, 100%);
+  --popover-foreground: hsl(30, 26%, 14%);
+  --card: hsl(0, 0%, 100%);
+  --card-foreground: hsl(30, 26%, 14%);
+  --border: hsl(220, 13%, 91%);
+  --input: hsl(220, 13%, 91%);
+  --primary: hsl(217, 91%, 60%);
+  --primary-foreground: hsl(222, 84%, 99%);
+  --secondary: hsl(166, 76%, 46%);
+  --secondary-foreground: hsl(0, 0%, 100%);
+  --accent: hsl(43, 96%, 56%);
+  --accent-foreground: hsl(26, 83%, 14%);
+  --destructive: hsl(0, 84%, 60%);
+  --destructive-foreground: hsl(60, 9%, 98%);
+  --ring: hsl(217, 91%, 60%);
+  --radius: 0.75rem;
+
+  /* Custom colors for Campus Yuva */
+  --neutral-50: hsl(248, 50%, 99%);
+  --neutral-100: hsl(220, 14%, 96%);
+  --neutral-400: hsl(215, 16%, 47%);
+  --neutral-600: hsl(215, 25%, 27%);
+  --neutral-900: hsl(222, 47%, 11%);
+}
+
+.dark {
+  --background: hsl(222, 47%, 11%);
+  --foreground: hsl(0, 0%, 98%);
+  --muted: hsl(217, 33%, 17%);
+  --muted-foreground: hsl(215, 20%, 65%);
+  --popover: hsl(222, 47%, 11%);
+  --popover-foreground: hsl(0, 0%, 98%);
+  --card: hsl(222, 47%, 11%);
+  --card-foreground: hsl(0, 0%, 98%);
+  --border: hsl(217, 33%, 17%);
+  --input: hsl(217, 33%, 17%);
+  --primary: hsl(217, 91%, 60%);
+  --primary-foreground: hsl(222, 84%, 99%);
+  --secondary: hsl(166, 76%, 46%);
+  --secondary-foreground: hsl(0, 0%, 100%);
+  --accent: hsl(43, 96%, 56%);
+  --accent-foreground: hsl(26, 83%, 14%);
+  --destructive: hsl(0, 62%, 30%);
+  --destructive-foreground: hsl(0, 0%, 98%);
+  --ring: hsl(217, 91%, 60%);
+
+  /* Custom colors for Campus Yuva dark mode */
+  --neutral-50: hsl(222, 47%, 11%);
+  --neutral-100: hsl(217, 33%, 17%);
+  --neutral-400: hsl(215, 20%, 65%);
+  --neutral-600: hsl(215, 16%, 47%);
+  --neutral-900: hsl(248, 50%, 99%);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+@layer utilities {
+  .gradient-primary {
+    background: linear-gradient(135deg, var(--primary), var(--secondary));
+  }
+  
+  .text-gradient {
+    background: linear-gradient(135deg, var(--primary), var(--secondary));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+}
