@@ -39,7 +39,7 @@ import {
   type VideoResume,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, sql } from "drizzle-orm";
 
 export interface IStorage {
   // College operations
@@ -338,19 +338,149 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(jobApplications).where(eq(jobApplications.jobId, jobId));
   }
 
-  // Chat message operations
-  async getMessages(userId: string, collegeId: string): Promise<ChatMessage[]> {
-    return await db.select().from(chatMessages).where(
-      and(
-        eq(chatMessages.collegeId, collegeId),
-        eq(chatMessages.receiverId, userId)
-      )
-    ).orderBy(desc(chatMessages.sentAt));
+  // Enhanced chat group operations
+  async getChatGroups(collegeId: string, type?: string): Promise<any[]> {
+    const conditions = [eq(chatGroups.collegeId, collegeId), eq(chatGroups.isActive, true)];
+    if (type) {
+      conditions.push(eq(chatGroups.type, type));
+    }
+    return await db.select().from(chatGroups).where(and(...conditions));
+  }
+
+  async getChatGroup(id: string): Promise<any | undefined> {
+    const [group] = await db.select().from(chatGroups).where(eq(chatGroups.id, id));
+    return group;
+  }
+
+  async createChatGroup(group: any): Promise<any> {
+    const [newGroup] = await db.insert(chatGroups).values(group).returning();
+    
+    // Add creator as admin member
+    await db.insert(chatGroupMembers).values({
+      groupId: newGroup.id,
+      userId: group.creatorId,
+      role: "creator"
+    });
+    
+    return newGroup;
+  }
+
+  async updateChatGroup(id: string, updates: any): Promise<any | undefined> {
+    const [group] = await db.update(chatGroups)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(chatGroups.id, id))
+      .returning();
+    return group;
+  }
+
+  async deleteChatGroup(id: string, userId: string): Promise<boolean> {
+    // Only creator can delete
+    const group = await this.getChatGroup(id);
+    if (!group || group.creatorId !== userId) return false;
+    
+    await db.update(chatGroups)
+      .set({ isActive: false, updatedAt: new Date() })
+      .where(eq(chatGroups.id, id));
+    return true;
+  }
+
+  async joinChatGroup(groupId: string, userId: string): Promise<any> {
+    const [member] = await db.insert(chatGroupMembers).values({
+      groupId,
+      userId,
+      role: "member"
+    }).returning();
+
+    // Update member count by getting current count and incrementing
+    const currentGroup = await this.getChatGroup(groupId);
+    if (currentGroup) {
+      await db.update(chatGroups)
+        .set({ memberCount: currentGroup.memberCount + 1 })
+        .where(eq(chatGroups.id, groupId));
+    }
+
+    return member;
+  }
+
+  async leaveChatGroup(groupId: string, userId: string): Promise<boolean> {
+    await db.delete(chatGroupMembers)
+      .where(and(
+        eq(chatGroupMembers.groupId, groupId),
+        eq(chatGroupMembers.userId, userId)
+      ));
+
+    // Update member count by getting current count and decrementing
+    const currentGroup = await this.getChatGroup(groupId);
+    if (currentGroup && currentGroup.memberCount > 0) {
+      await db.update(chatGroups)
+        .set({ memberCount: currentGroup.memberCount - 1 })
+        .where(eq(chatGroups.id, groupId));
+    }
+
+    return true;
+  }
+
+  async getChatGroupMembers(groupId: string): Promise<any[]> {
+    return await db.select().from(chatGroupMembers)
+      .where(eq(chatGroupMembers.groupId, groupId));
+  }
+
+  async getUserChatGroups(userId: string): Promise<any[]> {
+    const memberGroups = await db.select({
+      group: chatGroups
+    })
+    .from(chatGroupMembers)
+    .innerJoin(chatGroups, eq(chatGroupMembers.groupId, chatGroups.id))
+    .where(eq(chatGroupMembers.userId, userId));
+    
+    return memberGroups.map(result => result.group);
+  }
+
+  // Enhanced messaging with grammar correction
+  async getMessages(groupId?: string, userId?: string, collegeId?: string): Promise<ChatMessage[]> {
+    let conditions = [];
+    
+    if (groupId) {
+      conditions.push(eq(chatMessages.groupId, groupId));
+    }
+    if (userId) {
+      conditions.push(eq(chatMessages.receiverId, userId));
+    }
+    if (collegeId) {
+      conditions.push(eq(chatMessages.collegeId, collegeId));
+    }
+    
+    return await db.select().from(chatMessages)
+      .where(and(...conditions))
+      .orderBy(desc(chatMessages.sentAt));
   }
 
   async createMessage(insertMessage: InsertChatMessage): Promise<ChatMessage> {
+    // Set expiration for temporary files
+    if (insertMessage.messageType !== 'text' && insertMessage.fileUrl) {
+      insertMessage.expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+    }
+
     const [message] = await db.insert(chatMessages).values(insertMessage).returning();
     return message;
+  }
+
+  async updateMessage(id: string, updates: any): Promise<ChatMessage | undefined> {
+    const [message] = await db.update(chatMessages)
+      .set({ ...updates, isEdited: true })
+      .where(eq(chatMessages.id, id))
+      .returning();
+    return message;
+  }
+
+  async deleteMessage(id: string, userId: string): Promise<boolean> {
+    await db.update(chatMessages)
+      .set({ deletedAt: new Date() })
+      .where(and(
+        eq(chatMessages.id, id),
+        eq(chatMessages.senderId, userId)
+      ));
+    return true;
   }
 
   async getConversation(user1Id: string, user2Id: string): Promise<ChatMessage[]> {
@@ -362,15 +492,239 @@ export class DatabaseStorage implements IStorage {
     ).orderBy(desc(chatMessages.sentAt));
   }
 
-  // Forum operations
-  async getForumPosts(collegeId: string): Promise<ForumPost[]> {
-    return await db.select().from(forumPosts).where(eq(forumPosts.collegeId, collegeId))
+  async processGrammarCorrection(text: string, userId: string): Promise<any> {
+    // This would integrate with LanguageTool API
+    // For now, return a mock response
+    const correction = {
+      originalText: text,
+      correctedText: text, // Would be corrected by LanguageTool
+      suggestions: [],
+      language: "en",
+      serviceUsed: "languagetool",
+      processingTime: 100
+    };
+
+    await db.insert(grammarCorrections).values({
+      userId,
+      ...correction
+    });
+
+    return correction;
+  }
+
+  // RSS feed operations
+  async getRssFeeds(collegeId: string): Promise<any[]> {
+    return await db.select().from(rssFeeds)
+      .where(and(
+        eq(rssFeeds.collegeId, collegeId),
+        eq(rssFeeds.isActive, true),
+        eq(rssFeeds.isApproved, true)
+      ));
+  }
+
+  async createRssFeed(feed: any): Promise<any> {
+    const [newFeed] = await db.insert(rssFeeds).values(feed).returning();
+    return newFeed;
+  }
+
+  async updateRssFeed(id: string, updates: any): Promise<any | undefined> {
+    const [feed] = await db.update(rssFeeds)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(rssFeeds.id, id))
+      .returning();
+    return feed;
+  }
+
+  async deleteRssFeed(id: string): Promise<boolean> {
+    await db.update(rssFeeds)
+      .set({ isActive: false })
+      .where(eq(rssFeeds.id, id));
+    return true;
+  }
+
+  async approveRssFeed(id: string, adminId: string): Promise<any | undefined> {
+    const [feed] = await db.update(rssFeeds)
+      .set({ isApproved: true, approvedBy: adminId, updatedAt: new Date() })
+      .where(eq(rssFeeds.id, id))
+      .returning();
+    return feed;
+  }
+
+  async getRssFeedItems(feedId: string): Promise<any[]> {
+    return await db.select().from(rssFeedItems)
+      .where(and(
+        eq(rssFeedItems.feedId, feedId),
+        eq(rssFeedItems.isApproved, true)
+      ))
+      .orderBy(desc(rssFeedItems.publishedAt));
+  }
+
+  async createRssFeedItem(item: any): Promise<any> {
+    const [newItem] = await db.insert(rssFeedItems).values(item).returning();
+    return newItem;
+  }
+
+  async approveRssFeedItem(id: string, adminId: string): Promise<any | undefined> {
+    const [item] = await db.update(rssFeedItems)
+      .set({ isApproved: true })
+      .where(eq(rssFeedItems.id, id))
+      .returning();
+    return item;
+  }
+
+  // Enhanced forum operations
+  async getForumCategories(collegeId: string): Promise<any[]> {
+    return await db.select().from(forumCategories)
+      .where(and(
+        eq(forumCategories.collegeId, collegeId),
+        eq(forumCategories.isActive, true)
+      ))
+      .orderBy(forumCategories.order);
+  }
+
+  async createForumCategory(category: any): Promise<any> {
+    const [newCategory] = await db.insert(forumCategories).values(category).returning();
+    return newCategory;
+  }
+
+  async getForumPosts(collegeId: string, categoryId?: string, groupId?: string): Promise<ForumPost[]> {
+    let conditions = [eq(forumPosts.collegeId, collegeId)];
+    
+    if (categoryId) {
+      conditions.push(eq(forumPosts.categoryId, categoryId));
+    }
+    if (groupId) {
+      conditions.push(eq(forumPosts.groupId, groupId));
+    }
+
+    return await db.select().from(forumPosts)
+      .where(and(...conditions))
       .orderBy(desc(forumPosts.createdAt));
   }
 
+  async getForumPost(id: string): Promise<ForumPost | undefined> {
+    const [post] = await db.select().from(forumPosts).where(eq(forumPosts.id, id));
+    return post;
+  }
+
   async createForumPost(post: any): Promise<ForumPost> {
-    const [forumPost] = await db.insert(forumPosts).values(post).returning();
-    return forumPost;
+    const [newPost] = await db.insert(forumPosts).values(post).returning();
+    return newPost;
+  }
+
+  async updateForumPost(id: string, updates: any): Promise<ForumPost | undefined> {
+    const [post] = await db.update(forumPosts)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(forumPosts.id, id))
+      .returning();
+    return post;
+  }
+
+  async deleteForumPost(id: string, userId: string): Promise<boolean> {
+    const post = await this.getForumPost(id);
+    if (!post || post.authorId !== userId) return false;
+    
+    await db.delete(forumPosts).where(eq(forumPosts.id, id));
+    return true;
+  }
+
+  async getForumReplies(postId: string): Promise<any[]> {
+    return await db.select().from(forumReplies)
+      .where(eq(forumReplies.postId, postId))
+      .orderBy(forumReplies.createdAt);
+  }
+
+  async createForumReply(reply: any): Promise<any> {
+    const [newReply] = await db.insert(forumReplies).values(reply).returning();
+    
+    // Update reply count
+    const currentPost = await this.getForumPost(reply.postId);
+    if (currentPost) {
+      await db.update(forumPosts)
+        .set({ repliesCount: currentPost.repliesCount + 1 })
+        .where(eq(forumPosts.id, reply.postId));
+    }
+    
+    return newReply;
+  }
+
+  async updateForumReply(id: string, updates: any): Promise<any | undefined> {
+    const [reply] = await db.update(forumReplies)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(forumReplies.id, id))
+      .returning();
+    return reply;
+  }
+
+  async deleteForumReply(id: string, userId: string): Promise<boolean> {
+    const [reply] = await db.select().from(forumReplies).where(eq(forumReplies.id, id));
+    if (!reply || reply.authorId !== userId) return false;
+    
+    await db.delete(forumReplies).where(eq(forumReplies.id, id));
+    
+    // Update reply count
+    const currentPost = await this.getForumPost(reply.postId);
+    if (currentPost && currentPost.repliesCount > 0) {
+      await db.update(forumPosts)
+        .set({ repliesCount: currentPost.repliesCount - 1 })
+        .where(eq(forumPosts.id, reply.postId));
+    }
+    
+    return true;
+  }
+
+  // File sharing operations
+  async uploadFile(fileData: any): Promise<any> {
+    // Set expiration for temporary files
+    if (fileData.isTemporary) {
+      fileData.expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+    }
+
+    const [file] = await db.insert(sharedFiles).values(fileData).returning();
+    return file;
+  }
+
+  async getFile(id: string): Promise<any | undefined> {
+    const [file] = await db.select().from(sharedFiles).where(eq(sharedFiles.id, id));
+    return file;
+  }
+
+  async deleteFile(id: string, userId: string): Promise<boolean> {
+    const file = await this.getFile(id);
+    if (!file || file.uploaderId !== userId) return false;
+    
+    await db.delete(sharedFiles).where(eq(sharedFiles.id, id));
+    return true;
+  }
+
+  async getUserFiles(userId: string): Promise<any[]> {
+    return await db.select().from(sharedFiles)
+      .where(eq(sharedFiles.uploaderId, userId))
+      .orderBy(desc(sharedFiles.createdAt));
+  }
+
+  async cleanupExpiredFiles(): Promise<number> {
+    const expiredFiles = await db.delete(sharedFiles)
+      .where(and(
+        eq(sharedFiles.isTemporary, true),
+        sql`expires_at < NOW()`
+      ))
+      .returning();
+    
+    return expiredFiles.length;
+  }
+
+  // Grammar correction operations
+  async saveGrammarCorrection(correction: any): Promise<any> {
+    const [newCorrection] = await db.insert(grammarCorrections).values(correction).returning();
+    return newCorrection;
+  }
+
+  async getGrammarHistory(userId: string): Promise<any[]> {
+    return await db.select().from(grammarCorrections)
+      .where(eq(grammarCorrections.userId, userId))
+      .orderBy(desc(grammarCorrections.createdAt))
+      .limit(50);
   }
 
   // Video resume operations

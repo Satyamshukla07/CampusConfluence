@@ -288,6 +288,385 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Enhanced Chat Groups API
+  app.get("/api/chat-groups", async (req, res) => {
+    try {
+      const { collegeId, type } = req.query;
+      if (!collegeId) {
+        return res.status(400).json({ message: "College ID is required" });
+      }
+      
+      const groups = await storage.getChatGroups(collegeId as string, type as string);
+      res.json(groups);
+    } catch (error) {
+      console.error("Error fetching chat groups:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/chat-groups", async (req, res) => {
+    try {
+      const group = await storage.createChatGroup(req.body);
+      res.status(201).json(group);
+    } catch (error) {
+      console.error("Error creating chat group:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.put("/api/chat-groups/:id", async (req, res) => {
+    try {
+      const group = await storage.updateChatGroup(req.params.id, req.body);
+      if (!group) {
+        return res.status(404).json({ message: "Group not found" });
+      }
+      res.json(group);
+    } catch (error) {
+      console.error("Error updating chat group:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.delete("/api/chat-groups/:id", async (req, res) => {
+    try {
+      const { userId } = req.body;
+      const success = await storage.deleteChatGroup(req.params.id, userId);
+      if (!success) {
+        return res.status(403).json({ message: "Not authorized to delete this group" });
+      }
+      res.json({ message: "Group deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting chat group:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/chat-groups/:groupId/join", async (req, res) => {
+    try {
+      const { userId } = req.body;
+      const member = await storage.joinChatGroup(req.params.groupId, userId);
+      res.status(201).json(member);
+    } catch (error) {
+      console.error("Error joining chat group:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/chat-groups/:groupId/leave", async (req, res) => {
+    try {
+      const { userId } = req.body;
+      const success = await storage.leaveChatGroup(req.params.groupId, userId);
+      res.json({ success });
+    } catch (error) {
+      console.error("Error leaving chat group:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get("/api/chat-groups/:groupId/members", async (req, res) => {
+    try {
+      const members = await storage.getChatGroupMembers(req.params.groupId);
+      res.json(members);
+    } catch (error) {
+      console.error("Error fetching group members:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get("/api/users/:userId/chat-groups", async (req, res) => {
+    try {
+      const groups = await storage.getUserChatGroups(req.params.userId);
+      res.json(groups);
+    } catch (error) {
+      console.error("Error fetching user groups:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Enhanced Messages API with Grammar Correction
+  app.get("/api/messages", async (req, res) => {
+    try {
+      const { groupId, userId, collegeId } = req.query;
+      const messages = await storage.getMessages(
+        groupId as string, 
+        userId as string, 
+        collegeId as string
+      );
+      res.json(messages);
+    } catch (error) {
+      console.error("Error fetching messages:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/messages", async (req, res) => {
+    try {
+      const messageData = req.body;
+      
+      // Process grammar correction if enabled
+      if (messageData.content && messageData.enableGrammarCheck) {
+        const correction = await storage.processGrammarCorrection(
+          messageData.content, 
+          messageData.senderId
+        );
+        messageData.originalContent = messageData.content;
+        messageData.correctedContent = correction.correctedText;
+        messageData.grammarSuggestions = correction.suggestions;
+      }
+
+      const message = await storage.createMessage(messageData);
+      res.status(201).json(message);
+    } catch (error) {
+      console.error("Error creating message:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.put("/api/messages/:id", async (req, res) => {
+    try {
+      const message = await storage.updateMessage(req.params.id, req.body);
+      if (!message) {
+        return res.status(404).json({ message: "Message not found" });
+      }
+      res.json(message);
+    } catch (error) {
+      console.error("Error updating message:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.delete("/api/messages/:id", async (req, res) => {
+    try {
+      const { userId } = req.body;
+      const success = await storage.deleteMessage(req.params.id, userId);
+      res.json({ success });
+    } catch (error) {
+      console.error("Error deleting message:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // RSS Feeds API
+  app.get("/api/rss-feeds", async (req, res) => {
+    try {
+      const { collegeId } = req.query;
+      if (!collegeId) {
+        return res.status(400).json({ message: "College ID is required" });
+      }
+      
+      const feeds = await storage.getRssFeeds(collegeId as string);
+      res.json(feeds);
+    } catch (error) {
+      console.error("Error fetching RSS feeds:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/rss-feeds", async (req, res) => {
+    try {
+      const feed = await storage.createRssFeed(req.body);
+      res.status(201).json(feed);
+    } catch (error) {
+      console.error("Error creating RSS feed:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.put("/api/rss-feeds/:id/approve", async (req, res) => {
+    try {
+      const { adminId } = req.body;
+      const feed = await storage.approveRssFeed(req.params.id, adminId);
+      if (!feed) {
+        return res.status(404).json({ message: "RSS feed not found" });
+      }
+      res.json(feed);
+    } catch (error) {
+      console.error("Error approving RSS feed:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get("/api/rss-feeds/:feedId/items", async (req, res) => {
+    try {
+      const items = await storage.getRssFeedItems(req.params.feedId);
+      res.json(items);
+    } catch (error) {
+      console.error("Error fetching RSS items:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Enhanced Forum API
+  app.get("/api/forum/categories", async (req, res) => {
+    try {
+      const { collegeId } = req.query;
+      if (!collegeId) {
+        return res.status(400).json({ message: "College ID is required" });
+      }
+      
+      const categories = await storage.getForumCategories(collegeId as string);
+      res.json(categories);
+    } catch (error) {
+      console.error("Error fetching forum categories:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/forum/categories", async (req, res) => {
+    try {
+      const category = await storage.createForumCategory(req.body);
+      res.status(201).json(category);
+    } catch (error) {
+      console.error("Error creating forum category:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get("/api/forum/posts", async (req, res) => {
+    try {
+      const { collegeId, categoryId, groupId } = req.query;
+      if (!collegeId) {
+        return res.status(400).json({ message: "College ID is required" });
+      }
+      
+      const posts = await storage.getForumPosts(
+        collegeId as string, 
+        categoryId as string, 
+        groupId as string
+      );
+      res.json(posts);
+    } catch (error) {
+      console.error("Error fetching forum posts:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/forum/posts", async (req, res) => {
+    try {
+      const postData = req.body;
+      
+      // Process grammar correction for post content
+      if (postData.content && postData.enableGrammarCheck) {
+        const correction = await storage.processGrammarCorrection(
+          postData.content, 
+          postData.authorId
+        );
+        postData.originalContent = postData.content;
+        postData.correctedContent = correction.correctedText;
+        postData.grammarSuggestions = correction.suggestions;
+      }
+
+      const post = await storage.createForumPost(postData);
+      res.status(201).json(post);
+    } catch (error) {
+      console.error("Error creating forum post:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get("/api/forum/posts/:postId/replies", async (req, res) => {
+    try {
+      const replies = await storage.getForumReplies(req.params.postId);
+      res.json(replies);
+    } catch (error) {
+      console.error("Error fetching forum replies:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/forum/posts/:postId/replies", async (req, res) => {
+    try {
+      const replyData = { ...req.body, postId: req.params.postId };
+      
+      // Process grammar correction for reply content
+      if (replyData.content && replyData.enableGrammarCheck) {
+        const correction = await storage.processGrammarCorrection(
+          replyData.content, 
+          replyData.authorId
+        );
+        replyData.originalContent = replyData.content;
+        replyData.correctedContent = correction.correctedText;
+        replyData.grammarSuggestions = correction.suggestions;
+      }
+
+      const reply = await storage.createForumReply(replyData);
+      res.status(201).json(reply);
+    } catch (error) {
+      console.error("Error creating forum reply:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // File Sharing API
+  app.post("/api/files/upload", async (req, res) => {
+    try {
+      const file = await storage.uploadFile(req.body);
+      res.status(201).json(file);
+    } catch (error) {
+      console.error("Error uploading file:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get("/api/files/:id", async (req, res) => {
+    try {
+      const file = await storage.getFile(req.params.id);
+      if (!file) {
+        return res.status(404).json({ message: "File not found" });
+      }
+      res.json(file);
+    } catch (error) {
+      console.error("Error fetching file:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.delete("/api/files/:id", async (req, res) => {
+    try {
+      const { userId } = req.body;
+      const success = await storage.deleteFile(req.params.id, userId);
+      if (!success) {
+        return res.status(403).json({ message: "Not authorized to delete this file" });
+      }
+      res.json({ message: "File deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting file:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get("/api/users/:userId/files", async (req, res) => {
+    try {
+      const files = await storage.getUserFiles(req.params.userId);
+      res.json(files);
+    } catch (error) {
+      console.error("Error fetching user files:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Grammar Correction API
+  app.post("/api/grammar/check", async (req, res) => {
+    try {
+      const { text, userId } = req.body;
+      const correction = await storage.processGrammarCorrection(text, userId);
+      res.json(correction);
+    } catch (error) {
+      console.error("Error processing grammar correction:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get("/api/users/:userId/grammar-history", async (req, res) => {
+    try {
+      const history = await storage.getGrammarHistory(req.params.userId);
+      res.json(history);
+    } catch (error) {
+      console.error("Error fetching grammar history:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   // Seed database endpoint
   app.post("/api/seed", async (req, res) => {
     try {
