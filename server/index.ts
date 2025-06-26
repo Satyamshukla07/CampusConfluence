@@ -1,6 +1,10 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
+import dotenv from "dotenv"
+dotenv.config();
+
+// dotenv().Config
 
 const app = express();
 app.use(express.json());
@@ -59,12 +63,25 @@ app.use((req, res, next) => {
   // ALWAYS serve the app on port 5000
   // this serves both the API and the client.
   // It is the only port that is not firewalled.
-  const port = 5000;
+ const port = Number(process.env.PORT) || 5000;
   server.listen({
     port,
-    host: "0.0.0.0",
-    reusePort: true,
+    host: "0.0.0.0"
   }, () => {
     log(`serving on port ${port}`);
+  }).on('error', (e: NodeJS.ErrnoException) => {
+    if (e.code === 'EADDRINUSE' || e.code === 'ENOTSUP') {
+      log(`Port ${port} is busy or not supported, trying alternative port...`);
+      server.listen({
+        port: 0,
+        host: "0.0.0.0"
+      }, () => {
+        const addr = server.address();
+        const actualPort = typeof addr === 'object' && addr ? addr.port : port;
+        log(`serving on port ${actualPort}`);
+      });
+    } else {
+      throw e;
+    }
   });
 })();
