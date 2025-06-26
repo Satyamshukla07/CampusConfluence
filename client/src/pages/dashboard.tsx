@@ -18,7 +18,7 @@ export default function Dashboard() {
     queryKey: ["/api/colleges"],
   });
 
-  const currentCollege = colleges?.[0]; // Use first college for demo
+  const currentCollege = colleges && colleges.length > 0 ? colleges[0] : null;
   
   // Mock user data - in real app, get from auth context with actual UUID
   const currentUser = {
@@ -35,7 +35,7 @@ export default function Dashboard() {
     readingScore: 92,
   };
 
-  const { data: practiceModules } = useQuery({
+  const { data: practiceModules = [] } = useQuery({
     queryKey: ["/api/practice-modules"],
     queryFn: () => 
       fetch(`/api/practice-modules?collegeId=${currentUser.collegeId}`)
@@ -43,12 +43,12 @@ export default function Dashboard() {
     enabled: !!currentUser.collegeId,
   });
 
-  const { data: userProgress } = useQuery({
+  const { data: userProgress = [] } = useQuery({
     queryKey: [`/api/users/${currentUser.id}/progress`],
     enabled: !!currentUser.id,
   });
 
-  const { data: studyGroups } = useQuery({
+  const { data: studyGroups = [] } = useQuery({
     queryKey: ["/api/study-groups"],
     queryFn: () => 
       fetch(`/api/study-groups?collegeId=${currentUser.collegeId}`)
@@ -56,7 +56,7 @@ export default function Dashboard() {
     enabled: !!currentUser.collegeId,
   });
 
-  const { data: jobPostings } = useQuery({
+  const { data: jobPostings = [] } = useQuery({
     queryKey: ["/api/job-postings"],
     queryFn: () => 
       fetch(`/api/job-postings?collegeId=${currentUser.collegeId}`)

@@ -334,6 +334,13 @@ export class DatabaseStorage implements IStorage {
   // Seed database with sample data
   async seedDatabase(): Promise<void> {
     try {
+      // Check if data already exists
+      const existingColleges = await db.select().from(colleges);
+      if (existingColleges.length > 0) {
+        console.log("Database already seeded, skipping");
+        return;
+      }
+
       // Create sample college
       const [college] = await db.insert(colleges).values({
         name: "Delhi University",
@@ -341,48 +348,52 @@ export class DatabaseStorage implements IStorage {
         isActive: true
       }).returning();
 
-      // Create sample users
-      const [student] = await db.insert(users).values({
+      // Create sample users using proper insert types
+      const studentData = {
         collegeId: college.id,
         username: "arjun_student",
         email: "arjun@du.ac.in",
         password: "password123",
         firstName: "Arjun",
         lastName: "Kumar",
-        role: "student",
-        englishLevel: "intermediate",
+        role: "student" as const,
+        englishLevel: "intermediate" as const,
         speakingScore: 75,
         writingScore: 82,
         readingScore: 88,
         practiceHours: 45,
         streak: 7,
         isActive: true
-      }).returning();
+      };
 
-      const [recruiter] = await db.insert(users).values({
+      const [student] = await db.insert(users).values(studentData).returning();
+
+      const recruiterData = {
         collegeId: college.id,
         username: "recruiter_tech",
         email: "hiring@techcorp.com",
         password: "password123",
         firstName: "Priya",
         lastName: "Sharma",
-        role: "recruiter",
-        englishLevel: "advanced",
+        role: "recruiter" as const,
+        englishLevel: "advanced" as const,
         speakingScore: 95,
         writingScore: 92,
         readingScore: 96,
         practiceHours: 0,
         streak: 0,
         isActive: true
-      }).returning();
+      };
+
+      const [recruiter] = await db.insert(users).values(recruiterData).returning();
 
       // Create practice modules
-      const [practiceModule] = await db.insert(practiceModules).values({
+      const moduleData = {
         collegeId: college.id,
         title: "Business English Conversation",
         description: "Practice professional conversations for workplace scenarios",
-        type: "speaking",
-        difficulty: "intermediate",
+        type: "speaking" as const,
+        difficulty: "intermediate" as const,
         duration: 30,
         exercises: [
           { type: "conversation", topic: "presentation" },
@@ -391,35 +402,42 @@ export class DatabaseStorage implements IStorage {
         ],
         createdBy: student.id,
         isActive: true
-      }).returning();
+      };
+
+      const [practiceModule] = await db.insert(practiceModules).values(moduleData).returning();
 
       // Create study group
-      const [studyGroup] = await db.insert(studyGroups).values({
+      const groupData = {
         collegeId: college.id,
         name: "Speaking Practice Circle",
         description: "Daily speaking practice sessions for intermediate learners",
-        type: "speaking",
+        type: "speaking" as const,
         memberCount: 1,
         maxMembers: 8,
         isActive: true,
         nextSession: new Date(Date.now() + 24 * 60 * 60 * 1000),
         createdBy: student.id
-      }).returning();
+      };
+
+      const [studyGroup] = await db.insert(studyGroups).values(groupData).returning();
 
       // Create job posting
-      await db.insert(jobPostings).values({
+      const jobData = {
         collegeId: college.id,
+        recruiterId: recruiter.id,
         title: "Junior Software Developer",
         company: "TechCorp Solutions",
         description: "Looking for fresh graduates with strong English communication skills for our development team.",
         location: "Bangalore, India",
         salary: "₹4-6 LPA",
-        careerPath: "technology",
-        experienceLevel: "entry",
+        jobType: "full-time" as const,
+        careerPath: "technology" as const,
+        experienceLevel: "entry" as const,
         requirements: ["Strong communication skills", "Problem-solving", "Team collaboration", "Technical aptitude"],
-        recruiterId: recruiter.id,
         isActive: true
-      });
+      };
+
+      await db.insert(jobPostings).values(jobData);
 
       console.log("Database seeded successfully with sample data");
     } catch (error) {
