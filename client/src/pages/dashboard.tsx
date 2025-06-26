@@ -14,11 +14,11 @@ export default function Dashboard() {
   const [showPracticeModal, setShowPracticeModal] = useState(false);
 
   // Get colleges and set current college context
-  const { data: colleges } = useQuery({
+  const { data: colleges = [] } = useQuery<any[]>({
     queryKey: ["/api/colleges"],
   });
 
-  const currentCollege = colleges && colleges.length > 0 ? colleges[0] : null;
+  const currentCollege = Array.isArray(colleges) && colleges.length > 0 ? colleges[0] : null;
   
   // Mock user data - in real app, get from auth context with actual UUID
   const currentUser = {
@@ -35,7 +35,7 @@ export default function Dashboard() {
     readingScore: 92,
   };
 
-  const { data: practiceModules = [] } = useQuery({
+  const { data: practiceModules = [] } = useQuery<any[]>({
     queryKey: ["/api/practice-modules"],
     queryFn: () => 
       fetch(`/api/practice-modules?collegeId=${currentUser.collegeId}`)
@@ -66,7 +66,7 @@ export default function Dashboard() {
 
   const handleSidebarAction = (action: string) => {
     if (action === "speaking-practice") {
-      const speakingModule = practiceModules?.find((m: any) => m.type === "speaking");
+      const speakingModule = practiceModules.find((m: any) => m.type === "speaking");
       if (speakingModule) {
         setSelectedModule(speakingModule);
         setShowPracticeModal(true);
@@ -79,8 +79,8 @@ export default function Dashboard() {
     setShowPracticeModal(true);
   };
 
-  const getProgressForModule = (moduleId: number) => {
-    const progress = userProgress?.find((p: any) => p.moduleId === moduleId);
+  const getProgressForModule = (moduleId: string) => {
+    const progress = userProgress.find((p: any) => p.moduleId === moduleId);
     return progress?.progress || 0;
   };
 
