@@ -1,8 +1,8 @@
-# Campus Yuva - English Learning Platform
+# Campus Yuva - Driving Job-readiness and Employability
 
 ## Overview
 
-Campus Yuva is a comprehensive English learning platform designed specifically for Indian college students to improve their English proficiency and career prospects. The platform combines language practice modules, collaborative study groups, job opportunities, and community features to create a holistic learning environment.
+Campus Yuva is a comprehensive platform driving job-readiness and employability for college students in Tier 2, 3 and 4 cities. The platform combines English proficiency development, collaborative study groups, job opportunities, and community features to create a holistic career preparation environment focused on improving employment outcomes for students in smaller cities.
 
 ## System Architecture
 
@@ -165,6 +165,7 @@ Changelog:
 - June 26, 2025: Implemented auto-moderation panel with 85% automated processing to support lean teams
 - June 26, 2025: Added comprehensive authentication system with user profile management
 - June 26, 2025: Enhanced admin dashboard with real-time analytics and college-based data segregation
+- June 26, 2025: Updated platform messaging to focus on "Driving Job-readiness and Employability for College Students in Tier 2, 3 and 4 Cities"
 ```
 
 ## User Preferences

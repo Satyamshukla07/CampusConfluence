@@ -57,7 +57,7 @@ export default function AuthLogin() {
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold text-gray-900 mb-4">Campus Yuva</h1>
           <p className="text-xl text-gray-600 mb-8">
-            English Learning Platform for Indian College Students
+            Driving Job-readiness and Employability for College Students in Tier 2, 3 and 4 Cities
           </p>
         </div>
 
