@@ -43,7 +43,7 @@ export default function Dashboard() {
     enabled: !!currentUser.collegeId,
   });
 
-  const { data: userProgress = [] } = useQuery({
+  const { data: userProgress = [] } = useQuery<any[]>({
     queryKey: [`/api/users/${currentUser.id}/progress`],
     enabled: !!currentUser.id,
   });
@@ -80,7 +80,7 @@ export default function Dashboard() {
   };
 
   const getProgressForModule = (moduleId: string) => {
-    const progress = userProgress.find((p: any) => p.moduleId === moduleId);
+    const progress = Array.isArray(userProgress) ? userProgress.find((p: any) => p.moduleId === moduleId) : null;
     return progress?.progress || 0;
   };
 
