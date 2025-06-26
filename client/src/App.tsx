@@ -9,6 +9,8 @@ import Practice from "@/pages/practice";
 import Collaborate from "@/pages/collaborate";
 import Jobs from "@/pages/jobs";
 import Community from "@/pages/community";
+import VideoResume from "@/pages/video-resume";
+import RecruiterDashboard from "@/pages/recruiter-dashboard";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -27,6 +29,8 @@ function Router() {
         <Route path="/collaborate" component={Collaborate} />
         <Route path="/jobs" component={Jobs} />
         <Route path="/community" component={Community} />
+        <Route path="/video-resume" component={VideoResume} />
+        <Route path="/recruiter-dashboard" component={RecruiterDashboard} />
         <Route component={NotFound} />
       </Switch>
     </div>

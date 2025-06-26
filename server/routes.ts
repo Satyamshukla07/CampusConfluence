@@ -667,6 +667,231 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Enhanced Video Resume API with Career Tracking
+  app.get("/api/video-resumes", async (req, res) => {
+    try {
+      const { userId } = req.query;
+      if (!userId) {
+        return res.status(400).json({ message: "User ID is required" });
+      }
+      
+      const resumes = await storage.getVideoResumes(userId as string);
+      res.json(resumes);
+    } catch (error) {
+      console.error("Error fetching video resumes:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get("/api/video-resumes/:id", async (req, res) => {
+    try {
+      const resume = await storage.getVideoResumeById(req.params.id);
+      if (!resume) {
+        return res.status(404).json({ message: "Video resume not found" });
+      }
+      res.json(resume);
+    } catch (error) {
+      console.error("Error fetching video resume:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/video-resumes", async (req, res) => {
+    try {
+      const resume = await storage.createVideoResume(req.body);
+      res.status(201).json(resume);
+    } catch (error) {
+      console.error("Error creating video resume:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.put("/api/video-resumes/:id", async (req, res) => {
+    try {
+      const resume = await storage.updateVideoResume(req.params.id, req.body);
+      if (!resume) {
+        return res.status(404).json({ message: "Video resume not found" });
+      }
+      res.json(resume);
+    } catch (error) {
+      console.error("Error updating video resume:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.delete("/api/video-resumes/:id", async (req, res) => {
+    try {
+      const { userId } = req.body;
+      const success = await storage.deleteVideoResume(req.params.id, userId);
+      if (!success) {
+        return res.status(403).json({ message: "Not authorized to delete this video resume" });
+      }
+      res.json({ message: "Video resume deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting video resume:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.put("/api/video-resumes/:id/cefr-level", async (req, res) => {
+    try {
+      const { cefrLevel, assignedBy } = req.body;
+      const resume = await storage.assignCefrLevel(req.params.id, cefrLevel, assignedBy);
+      if (!resume) {
+        return res.status(404).json({ message: "Video resume not found" });
+      }
+      res.json(resume);
+    } catch (error) {
+      console.error("Error assigning CEFR level:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Advanced Recruiter Search API with Multiple Filters
+  app.get("/api/video-resumes/search", async (req, res) => {
+    try {
+      const {
+        collegeIds,
+        gender,
+        studentName,
+        courseName,
+        courseYear,
+        cefrLevel,
+        careerCategories,
+        careerSubCategories,
+        limit = "20",
+        offset = "0"
+      } = req.query;
+
+      const filters = {
+        collegeIds: collegeIds ? (Array.isArray(collegeIds) ? collegeIds : [collegeIds]) : undefined,
+        gender: gender as string,
+        studentName: studentName as string,
+        courseName: courseName as string,
+        courseYear: courseYear as string,
+        cefrLevel: cefrLevel ? (Array.isArray(cefrLevel) ? cefrLevel : [cefrLevel]) : undefined,
+        careerCategories: careerCategories ? (Array.isArray(careerCategories) ? careerCategories : [careerCategories]) : undefined,
+        careerSubCategories: careerSubCategories ? (Array.isArray(careerSubCategories) ? careerSubCategories : [careerSubCategories]) : undefined,
+        limit: parseInt(limit as string),
+        offset: parseInt(offset as string)
+      };
+
+      const results = await storage.searchVideoResumes(filters);
+      res.json(results);
+    } catch (error) {
+      console.error("Error searching video resumes:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Recruiter Activity Tracking API
+  app.post("/api/recruiter-activities", async (req, res) => {
+    try {
+      const activity = await storage.createRecruiterActivity(req.body);
+      res.status(201).json(activity);
+    } catch (error) {
+      console.error("Error creating recruiter activity:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get("/api/recruiter-activities", async (req, res) => {
+    try {
+      const { recruiterId } = req.query;
+      if (!recruiterId) {
+        return res.status(400).json({ message: "Recruiter ID is required" });
+      }
+      
+      const activities = await storage.getRecruiterActivities(recruiterId as string);
+      res.json(activities);
+    } catch (error) {
+      console.error("Error fetching recruiter activities:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Interest Notification API (Email of Interest to Interview)
+  app.post("/api/interest-notifications", async (req, res) => {
+    try {
+      const notification = await storage.sendInterestNotification(req.body);
+      
+      // In a real application, trigger email sending here
+      // await emailService.sendInterestEmail(notification);
+      
+      res.status(201).json(notification);
+    } catch (error) {
+      console.error("Error sending interest notification:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get("/api/interest-notifications", async (req, res) => {
+    try {
+      const { studentId, recruiterId } = req.query;
+      
+      let notifications;
+      if (studentId) {
+        notifications = await storage.getInterestNotifications(studentId as string);
+      } else if (recruiterId) {
+        notifications = await storage.getRecruiterNotifications(recruiterId as string);
+      } else {
+        return res.status(400).json({ message: "Either studentId or recruiterId is required" });
+      }
+      
+      res.json(notifications);
+    } catch (error) {
+      console.error("Error fetching interest notifications:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.put("/api/interest-notifications/:id/viewed", async (req, res) => {
+    try {
+      const success = await storage.markNotificationAsViewed(req.params.id);
+      res.json({ success });
+    } catch (error) {
+      console.error("Error marking notification as viewed:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Bulk Upload API for Student Data
+  app.post("/api/bulk-upload", async (req, res) => {
+    try {
+      const session = await storage.createBulkUploadSession(req.body);
+      res.status(201).json(session);
+    } catch (error) {
+      console.error("Error creating bulk upload session:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/bulk-upload/:sessionId/process", async (req, res) => {
+    try {
+      const { studentData } = req.body;
+      await storage.processBulkStudentData(req.params.sessionId, studentData);
+      
+      // Get updated session status
+      const sessions = await storage.getBulkUploadSessions(req.body.collegeId);
+      const updatedSession = sessions.find(s => s.id === req.params.sessionId);
+      
+      res.json(updatedSession);
+    } catch (error) {
+      console.error("Error processing bulk upload:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get("/api/bulk-upload/:collegeId/sessions", async (req, res) => {
+    try {
+      const sessions = await storage.getBulkUploadSessions(req.params.collegeId);
+      res.json(sessions);
+    } catch (error) {
+      console.error("Error fetching bulk upload sessions:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   // Seed database endpoint
   app.post("/api/seed", async (req, res) => {
     try {

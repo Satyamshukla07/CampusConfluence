@@ -20,6 +20,8 @@ export function Navbar({ user }: NavbarProps) {
     { href: "/collaborate", label: "Collaborate", active: location === "/collaborate" },
     { href: "/jobs", label: "Jobs", active: location === "/jobs" },
     { href: "/community", label: "Community", active: location === "/community" },
+    { href: "/video-resume", label: "Video Resume", active: location === "/video-resume" },
+    { href: "/recruiter-dashboard", label: "Recruiters", active: location === "/recruiter-dashboard" },
   ];
 
   return (
