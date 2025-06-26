@@ -270,7 +270,7 @@ export const grammarCorrections = pgTable("grammar_corrections", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-// Video resumes with career tracking
+// Video resumes with comprehensive career tracking
 export const videoResumes = pgTable("video_resumes", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: uuid("user_id").notNull(),
@@ -279,16 +279,75 @@ export const videoResumes = pgTable("video_resumes", {
   videoUrl: text("video_url").notNull(),
   thumbnailUrl: text("thumbnail_url"),
   duration: integer("duration"), // in seconds
-  careerPath: text("career_path").notNull(),
-  experienceLevel: text("experience_level").notNull(),
-  location: text("location"),
-  cefrTags: json("cefr_tags").notNull().default('[]'), // A1, A2, B1, B2, C1, C2
-  skillTags: json("skill_tags").notNull().default('[]'),
+  
+  // Career Path Categories and Sub-Categories
+  careerCategory: text("career_category").notNull(), // Technology, Finance & Management, Healthcare, Other Promising Fields, Other
+  careerSubCategory: text("career_sub_category").notNull(),
+  customCareerPath: text("custom_career_path"), // For "Other" category
+  
+  // CEFR Level assigned by Admin or Master Trainer
+  cefrLevel: text("cefr_level"), // A1, A2, B1, B2, C1, C2
+  cefrAssignedBy: uuid("cefr_assigned_by"), // Admin/Master Trainer who assigned the level
+  cefrAssignedAt: timestamp("cefr_assigned_at"),
+  
+  // Video management
+  version: integer("version").notNull().default(1), // Track when videos are replaced
+  isActive: boolean("is_active").notNull().default(true),
   isPublic: boolean("is_public").notNull().default(true),
+  
+  // Analytics
   viewsCount: integer("views_count").notNull().default(0),
-  likesCount: integer("likes_count").notNull().default(0),
+  recruiterViews: integer("recruiter_views").notNull().default(0),
+  interestCount: integer("interest_count").notNull().default(0),
+  
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Recruiter activities tracking
+export const recruiterActivities = pgTable("recruiter_activities", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  recruiterId: uuid("recruiter_id").notNull(),
+  studentId: uuid("student_id").notNull(),
+  videoResumeId: uuid("video_resume_id"),
+  activityType: text("activity_type").notNull(), // viewed_profile, sent_interest, scheduled_interview, downloaded_resume
+  notes: text("notes"),
+  metadata: json("metadata").default('{}'), // Additional activity data
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Interest notifications from recruiters to students
+export const interestNotifications = pgTable("interest_notifications", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  recruiterId: uuid("recruiter_id").notNull(),
+  studentId: uuid("student_id").notNull(),
+  videoResumeId: uuid("video_resume_id").notNull(),
+  subject: text("subject").notNull(),
+  message: text("message").notNull(),
+  status: text("status").notNull().default("sent"), // sent, viewed, responded, archived
+  emailSent: boolean("email_sent").notNull().default(false),
+  emailSentAt: timestamp("email_sent_at"),
+  viewedAt: timestamp("viewed_at"),
+  respondedAt: timestamp("responded_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Bulk upload sessions for student data
+export const bulkUploadSessions = pgTable("bulk_upload_sessions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  collegeId: uuid("college_id").notNull(),
+  uploadedBy: uuid("uploaded_by").notNull(),
+  fileName: text("file_name").notNull(),
+  fileSize: integer("file_size").notNull(),
+  totalRecords: integer("total_records").notNull(),
+  processedRecords: integer("processed_records").notNull().default(0),
+  successfulRecords: integer("successful_records").notNull().default(0),
+  failedRecords: integer("failed_records").notNull().default(0),
+  status: text("status").notNull().default("processing"), // processing, completed, failed, cancelled
+  errorLog: json("error_log").default('[]'),
+  successLog: json("success_log").default('[]'),
+  createdAt: timestamp("created_at").defaultNow(),
+  completedAt: timestamp("completed_at"),
 });
 
 // Job postings with enhanced tracking
@@ -476,9 +535,56 @@ export const forumRepliesRelations = relations(forumReplies, ({ one }) => ({
   }),
 }));
 
-export const videoResumesRelations = relations(videoResumes, ({ one }) => ({
+export const videoResumesRelations = relations(videoResumes, ({ one, many }) => ({
   user: one(users, {
     fields: [videoResumes.userId],
+    references: [users.id],
+  }),
+  cefrAssigner: one(users, {
+    fields: [videoResumes.cefrAssignedBy],
+    references: [users.id],
+  }),
+  recruiterActivities: many(recruiterActivities),
+  interestNotifications: many(interestNotifications),
+}));
+
+export const recruiterActivitiesRelations = relations(recruiterActivities, ({ one }) => ({
+  recruiter: one(users, {
+    fields: [recruiterActivities.recruiterId],
+    references: [users.id],
+  }),
+  student: one(users, {
+    fields: [recruiterActivities.studentId],
+    references: [users.id],
+  }),
+  videoResume: one(videoResumes, {
+    fields: [recruiterActivities.videoResumeId],
+    references: [videoResumes.id],
+  }),
+}));
+
+export const interestNotificationsRelations = relations(interestNotifications, ({ one }) => ({
+  recruiter: one(users, {
+    fields: [interestNotifications.recruiterId],
+    references: [users.id],
+  }),
+  student: one(users, {
+    fields: [interestNotifications.studentId],
+    references: [users.id],
+  }),
+  videoResume: one(videoResumes, {
+    fields: [interestNotifications.videoResumeId],
+    references: [videoResumes.id],
+  }),
+}));
+
+export const bulkUploadSessionsRelations = relations(bulkUploadSessions, ({ one }) => ({
+  college: one(colleges, {
+    fields: [bulkUploadSessions.collegeId],
+    references: [colleges.id],
+  }),
+  uploader: one(users, {
+    fields: [bulkUploadSessions.uploadedBy],
     references: [users.id],
   }),
 }));
@@ -575,6 +681,33 @@ export const insertVideoResumeSchema = createInsertSchema(videoResumes).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
+}).extend({
+  careerCategory: z.enum([
+    "Technology",
+    "Finance & Management", 
+    "Healthcare",
+    "Other Promising Fields",
+    "Other"
+  ]),
+  careerSubCategory: z.string().min(1, "Sub-category is required"),
+  customCareerPath: z.string().optional(),
+  cefrLevel: z.enum(["A1", "A2", "B1", "B2", "C1", "C2"]).optional(),
+});
+
+export const insertRecruiterActivitySchema = createInsertSchema(recruiterActivities).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertInterestNotificationSchema = createInsertSchema(interestNotifications).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertBulkUploadSessionSchema = createInsertSchema(bulkUploadSessions).omit({
+  id: true,
+  createdAt: true,
+  completedAt: true,
 });
 
 export const insertJobPostingSchema = createInsertSchema(jobPostings).omit({
@@ -617,6 +750,59 @@ export type ForumReply = typeof forumReplies.$inferSelect;
 
 export type VideoResume = typeof videoResumes.$inferSelect;
 export type InsertVideoResume = z.infer<typeof insertVideoResumeSchema>;
+
+export type RecruiterActivity = typeof recruiterActivities.$inferSelect;
+export type InsertRecruiterActivity = z.infer<typeof insertRecruiterActivitySchema>;
+
+export type InterestNotification = typeof interestNotifications.$inferSelect;
+export type InsertInterestNotification = z.infer<typeof insertInterestNotificationSchema>;
+
+export type BulkUploadSession = typeof bulkUploadSessions.$inferSelect;
+export type InsertBulkUploadSession = z.infer<typeof insertBulkUploadSessionSchema>;
+
+// Career path categories and sub-categories
+export const CAREER_CATEGORIES = {
+  "Technology": [
+    "Engineering",
+    "Software Development", 
+    "Data Science",
+    "Cybersecurity",
+    "AI & ML",
+    "Cloud Computing",
+    "Game Development"
+  ],
+  "Finance & Management": [
+    "CA",
+    "CS", 
+    "Investment Banking",
+    "Finance Management",
+    "Business Analyst",
+    "Project Management",
+    "HR",
+    "Marketing",
+    "Sales"
+  ],
+  "Healthcare": [
+    "Medicine (MBBS, BDS)",
+    "Pharmacy",
+    "Nursing", 
+    "Healthcare Management"
+  ],
+  "Other Promising Fields": [
+    "Digital Marketing",
+    "Animation & Multimedia",
+    "Architecture",
+    "Law",
+    "Content Creation",
+    "Civil Services",
+    "Renewable Energy",
+    "Teaching",
+    "Research",
+    "Entrepreneurship"
+  ]
+} as const;
+
+export const CEFR_LEVELS = ["A1", "A2", "B1", "B2", "C1", "C2"] as const;
 
 export type JobPosting = typeof jobPostings.$inferSelect;
 export type InsertJobPosting = z.infer<typeof insertJobPostingSchema>;

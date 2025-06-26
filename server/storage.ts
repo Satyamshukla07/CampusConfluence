@@ -18,6 +18,9 @@ import {
   sharedFiles,
   grammarCorrections,
   videoResumes,
+  recruiterActivities,
+  interestNotifications,
+  bulkUploadSessions,
   type College,
   type InsertCollege,
   type User,
@@ -37,6 +40,13 @@ import {
   type InsertChatMessage,
   type ForumPost,
   type VideoResume,
+  type InsertVideoResume,
+  type RecruiterActivity,
+  type InsertRecruiterActivity,
+  type InterestNotification,
+  type InsertInterestNotification,
+  type BulkUploadSession,
+  type InsertBulkUploadSession,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, sql } from "drizzle-orm";
@@ -139,9 +149,43 @@ export interface IStorage {
   saveGrammarCorrection(correction: any): Promise<any>;
   getGrammarHistory(userId: string): Promise<any[]>;
 
-  // Video resume operations
+  // Enhanced video resume operations with career tracking
   getVideoResumes(userId: string): Promise<VideoResume[]>;
-  createVideoResume(resume: any): Promise<VideoResume>;
+  getVideoResumeById(id: string): Promise<VideoResume | undefined>;
+  createVideoResume(resume: InsertVideoResume): Promise<VideoResume>;
+  updateVideoResume(id: string, updates: Partial<InsertVideoResume>): Promise<VideoResume | undefined>;
+  deleteVideoResume(id: string, userId: string): Promise<boolean>;
+  assignCefrLevel(videoResumeId: string, cefrLevel: string, assignedBy: string): Promise<VideoResume | undefined>;
+  
+  // Recruiter filtering and search operations
+  searchVideoResumes(filters: {
+    collegeIds?: string[];
+    gender?: string;
+    studentName?: string;
+    courseName?: string;
+    courseYear?: string;
+    cefrLevel?: string[];
+    careerCategories?: string[];
+    careerSubCategories?: string[];
+    limit?: number;
+    offset?: number;
+  }): Promise<{ resumes: VideoResume[]; total: number; }>;
+  
+  // Recruiter activity operations
+  createRecruiterActivity(activity: InsertRecruiterActivity): Promise<RecruiterActivity>;
+  getRecruiterActivities(recruiterId: string): Promise<RecruiterActivity[]>;
+  
+  // Interest notification operations
+  sendInterestNotification(notification: InsertInterestNotification): Promise<InterestNotification>;
+  getInterestNotifications(studentId: string): Promise<InterestNotification[]>;
+  getRecruiterNotifications(recruiterId: string): Promise<InterestNotification[]>;
+  markNotificationAsViewed(notificationId: string): Promise<boolean>;
+  
+  // Bulk upload operations
+  createBulkUploadSession(session: InsertBulkUploadSession): Promise<BulkUploadSession>;
+  updateBulkUploadSession(id: string, updates: Partial<BulkUploadSession>): Promise<BulkUploadSession | undefined>;
+  getBulkUploadSessions(collegeId: string): Promise<BulkUploadSession[]>;
+  processBulkStudentData(sessionId: string, studentData: any[]): Promise<void>;
 
   // Seed data operations
   seedDatabase(): Promise<void>;
@@ -727,14 +771,323 @@ export class DatabaseStorage implements IStorage {
       .limit(50);
   }
 
-  // Video resume operations
+  // Enhanced video resume operations with career tracking
   async getVideoResumes(userId: string): Promise<VideoResume[]> {
-    return await db.select().from(videoResumes).where(eq(videoResumes.userId, userId));
+    return await db.select().from(videoResumes)
+      .where(and(
+        eq(videoResumes.userId, userId),
+        eq(videoResumes.isActive, true)
+      ))
+      .orderBy(desc(videoResumes.createdAt));
   }
 
-  async createVideoResume(resume: any): Promise<VideoResume> {
-    const [videoResume] = await db.insert(videoResumes).values(resume).returning();
+  async getVideoResumeById(id: string): Promise<VideoResume | undefined> {
+    const [resume] = await db.select().from(videoResumes)
+      .where(and(
+        eq(videoResumes.id, id),
+        eq(videoResumes.isActive, true)
+      ));
+    return resume;
+  }
+
+  async createVideoResume(resume: InsertVideoResume): Promise<VideoResume> {
+    // Deactivate previous video resume versions
+    await db.update(videoResumes)
+      .set({ isActive: false, updatedAt: new Date() })
+      .where(eq(videoResumes.userId, resume.userId));
+
+    const [videoResume] = await db.insert(videoResumes).values({
+      ...resume,
+      version: 1,
+      isActive: true
+    }).returning();
     return videoResume;
+  }
+
+  async updateVideoResume(id: string, updates: Partial<InsertVideoResume>): Promise<VideoResume | undefined> {
+    const [resume] = await db.update(videoResumes)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(videoResumes.id, id))
+      .returning();
+    return resume;
+  }
+
+  async deleteVideoResume(id: string, userId: string): Promise<boolean> {
+    const resume = await this.getVideoResumeById(id);
+    if (!resume || resume.userId !== userId) return false;
+
+    await db.update(videoResumes)
+      .set({ isActive: false, updatedAt: new Date() })
+      .where(eq(videoResumes.id, id));
+    return true;
+  }
+
+  async assignCefrLevel(videoResumeId: string, cefrLevel: string, assignedBy: string): Promise<VideoResume | undefined> {
+    const [resume] = await db.update(videoResumes)
+      .set({ 
+        cefrLevel,
+        cefrAssignedBy: assignedBy,
+        cefrAssignedAt: new Date(),
+        updatedAt: new Date()
+      })
+      .where(eq(videoResumes.id, videoResumeId))
+      .returning();
+    return resume;
+  }
+
+  // Advanced recruiter filtering and search
+  async searchVideoResumes(filters: {
+    collegeIds?: string[];
+    gender?: string;
+    studentName?: string;
+    courseName?: string;
+    courseYear?: string;
+    cefrLevel?: string[];
+    careerCategories?: string[];
+    careerSubCategories?: string[];
+    limit?: number;
+    offset?: number;
+  }): Promise<{ resumes: VideoResume[]; total: number; }> {
+    let query = db.select({
+      resume: videoResumes,
+      user: users,
+      college: colleges
+    })
+    .from(videoResumes)
+    .innerJoin(users, eq(videoResumes.userId, users.id))
+    .innerJoin(colleges, eq(users.collegeId, colleges.id))
+    .where(and(
+      eq(videoResumes.isActive, true),
+      eq(videoResumes.isPublic, true)
+    ));
+
+    const conditions = [
+      eq(videoResumes.isActive, true),
+      eq(videoResumes.isPublic, true)
+    ];
+
+    // Apply filters
+    if (filters.collegeIds && filters.collegeIds.length > 0) {
+      conditions.push(inArray(users.collegeId, filters.collegeIds));
+    }
+
+    if (filters.gender) {
+      conditions.push(eq(users.gender, filters.gender));
+    }
+
+    if (filters.studentName) {
+      const searchTerm = `%${filters.studentName.toLowerCase()}%`;
+      conditions.push(
+        or(
+          sql`LOWER(${users.firstName}) LIKE ${searchTerm}`,
+          sql`LOWER(${users.lastName}) LIKE ${searchTerm}`,
+          sql`LOWER(CONCAT(${users.firstName}, ' ', ${users.lastName})) LIKE ${searchTerm}`
+        )
+      );
+    }
+
+    if (filters.courseName) {
+      conditions.push(sql`LOWER(${users.course}) LIKE ${`%${filters.courseName.toLowerCase()}%`}`);
+    }
+
+    if (filters.courseYear) {
+      conditions.push(eq(users.year, filters.courseYear));
+    }
+
+    if (filters.cefrLevel && filters.cefrLevel.length > 0) {
+      conditions.push(inArray(videoResumes.cefrLevel, filters.cefrLevel));
+    }
+
+    if (filters.careerCategories && filters.careerCategories.length > 0) {
+      conditions.push(inArray(videoResumes.careerCategory, filters.careerCategories));
+    }
+
+    if (filters.careerSubCategories && filters.careerSubCategories.length > 0) {
+      conditions.push(inArray(videoResumes.careerSubCategory, filters.careerSubCategories));
+    }
+
+    // Get total count
+    const countQuery = db.select({ count: sql`COUNT(*)` })
+      .from(videoResumes)
+      .innerJoin(users, eq(videoResumes.userId, users.id))
+      .where(and(...conditions));
+
+    const [{ count }] = await countQuery;
+    const total = Number(count);
+
+    // Get paginated results
+    const results = await db.select({
+      resume: videoResumes,
+      user: users,
+      college: colleges
+    })
+    .from(videoResumes)
+    .innerJoin(users, eq(videoResumes.userId, users.id))
+    .innerJoin(colleges, eq(users.collegeId, colleges.id))
+    .where(and(...conditions))
+    .orderBy(desc(videoResumes.updatedAt))
+    .limit(filters.limit || 20)
+    .offset(filters.offset || 0);
+
+    const resumes = results.map(r => ({
+      ...r.resume,
+      user: r.user,
+      college: r.college
+    }));
+
+    return { resumes, total };
+  }
+
+  // Recruiter activity tracking
+  async createRecruiterActivity(activity: InsertRecruiterActivity): Promise<RecruiterActivity> {
+    const [newActivity] = await db.insert(recruiterActivities).values(activity).returning();
+    
+    // Update video resume view counts
+    if (activity.videoResumeId && activity.activityType === 'viewed_profile') {
+      await db.update(videoResumes)
+        .set({ 
+          viewsCount: sql`${videoResumes.viewsCount} + 1`,
+          recruiterViews: sql`${videoResumes.recruiterViews} + 1`
+        })
+        .where(eq(videoResumes.id, activity.videoResumeId));
+    }
+
+    return newActivity;
+  }
+
+  async getRecruiterActivities(recruiterId: string): Promise<RecruiterActivity[]> {
+    return await db.select().from(recruiterActivities)
+      .where(eq(recruiterActivities.recruiterId, recruiterId))
+      .orderBy(desc(recruiterActivities.createdAt))
+      .limit(100);
+  }
+
+  // Interest notification system
+  async sendInterestNotification(notification: InsertInterestNotification): Promise<InterestNotification> {
+    const [newNotification] = await db.insert(interestNotifications).values({
+      ...notification,
+      emailSent: false,
+      emailSentAt: new Date()
+    }).returning();
+
+    // Update interest count on video resume
+    await db.update(videoResumes)
+      .set({ interestCount: sql`${videoResumes.interestCount} + 1` })
+      .where(eq(videoResumes.id, notification.videoResumeId));
+
+    // Log recruiter activity
+    await this.createRecruiterActivity({
+      recruiterId: notification.recruiterId,
+      studentId: notification.studentId,
+      videoResumeId: notification.videoResumeId,
+      activityType: 'sent_interest',
+      notes: `Sent interest: ${notification.subject}`
+    });
+
+    return newNotification;
+  }
+
+  async getInterestNotifications(studentId: string): Promise<InterestNotification[]> {
+    return await db.select().from(interestNotifications)
+      .where(eq(interestNotifications.studentId, studentId))
+      .orderBy(desc(interestNotifications.createdAt));
+  }
+
+  async getRecruiterNotifications(recruiterId: string): Promise<InterestNotification[]> {
+    return await db.select().from(interestNotifications)
+      .where(eq(interestNotifications.recruiterId, recruiterId))
+      .orderBy(desc(interestNotifications.createdAt));
+  }
+
+  async markNotificationAsViewed(notificationId: string): Promise<boolean> {
+    await db.update(interestNotifications)
+      .set({ 
+        status: 'viewed',
+        viewedAt: new Date()
+      })
+      .where(eq(interestNotifications.id, notificationId));
+    return true;
+  }
+
+  // Bulk upload management
+  async createBulkUploadSession(session: InsertBulkUploadSession): Promise<BulkUploadSession> {
+    const [newSession] = await db.insert(bulkUploadSessions).values(session).returning();
+    return newSession;
+  }
+
+  async updateBulkUploadSession(id: string, updates: Partial<BulkUploadSession>): Promise<BulkUploadSession | undefined> {
+    const [session] = await db.update(bulkUploadSessions)
+      .set({ ...updates, completedAt: new Date() })
+      .where(eq(bulkUploadSessions.id, id))
+      .returning();
+    return session;
+  }
+
+  async getBulkUploadSessions(collegeId: string): Promise<BulkUploadSession[]> {
+    return await db.select().from(bulkUploadSessions)
+      .where(eq(bulkUploadSessions.collegeId, collegeId))
+      .orderBy(desc(bulkUploadSessions.createdAt));
+  }
+
+  async processBulkStudentData(sessionId: string, studentData: any[]): Promise<void> {
+    const session = await db.select().from(bulkUploadSessions)
+      .where(eq(bulkUploadSessions.id, sessionId));
+    
+    if (!session.length) throw new Error('Bulk upload session not found');
+
+    let successCount = 0;
+    let failCount = 0;
+    const errors: any[] = [];
+    const successes: any[] = [];
+
+    for (const student of studentData) {
+      try {
+        // Validate required fields
+        if (!student.email || !student.firstName || !student.lastName) {
+          throw new Error('Missing required fields: email, firstName, lastName');
+        }
+
+        // Check if user already exists
+        const existingUser = await this.getUserByEmail(student.email, session[0].collegeId);
+        if (existingUser) {
+          throw new Error(`User with email ${student.email} already exists`);
+        }
+
+        // Create new user
+        const newUser = await this.createUser({
+          firstName: student.firstName,
+          lastName: student.lastName,
+          email: student.email,
+          username: student.email.split('@')[0],
+          course: student.course || '',
+          year: student.year || '',
+          gender: student.gender || '',
+          collegeId: session[0].collegeId,
+          role: 'student',
+          isActive: true,
+          englishLevel: 'beginner'
+        });
+
+        successes.push({ email: student.email, userId: newUser.id });
+        successCount++;
+      } catch (error) {
+        errors.push({ 
+          email: student.email, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        });
+        failCount++;
+      }
+    }
+
+    // Update session with results
+    await this.updateBulkUploadSession(sessionId, {
+      processedRecords: studentData.length,
+      successfulRecords: successCount,
+      failedRecords: failCount,
+      status: failCount > 0 ? 'completed' : 'completed',
+      errorLog: errors,
+      successLog: successes
+    });
   }
 
   // Seed database with sample data
