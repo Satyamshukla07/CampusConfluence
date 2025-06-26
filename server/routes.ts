@@ -989,6 +989,80 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Authentication Routes for Google Auth
+  app.get("/api/auth/user-profile", async (req, res) => {
+    try {
+      const { email } = req.query;
+      if (!email) {
+        return res.status(400).json({ message: "Email is required" });
+      }
+      
+      const userProfile = await storage.getUserProfileByEmail(email as string);
+      if (!userProfile) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      res.json(userProfile);
+    } catch (error) {
+      console.error("Error fetching user profile:", error);
+      res.status(500).json({ message: "Failed to fetch user profile" });
+    }
+  });
+
+  app.post("/api/auth/register-user", async (req, res) => {
+    try {
+      const { email, name, role, collegeId } = req.body;
+      
+      // Validate required fields
+      if (!email || !name || !role) {
+        return res.status(400).json({ message: "Email, name, and role are required" });
+      }
+      
+      // For non-admin roles, collegeId is required
+      if (role !== 'admin' && role !== 'master_trainer' && !collegeId) {
+        return res.status(400).json({ message: "College ID is required for this role" });
+      }
+      
+      const userProfile = await storage.createUserProfile({
+        email,
+        name,
+        role,
+        collegeId: role === 'admin' || role === 'master_trainer' ? null : collegeId,
+        isActive: true
+      });
+      
+      res.json(userProfile);
+    } catch (error) {
+      console.error("Error registering user:", error);
+      res.status(500).json({ message: "Failed to register user" });
+    }
+  });
+
+  // Role-based data access middleware
+  const enforceDataIsolation = (allowedRoles: string[]) => {
+    return async (req: any, res: any, next: any) => {
+      try {
+        const { email } = req.query;
+        const userProfile = await storage.getUserProfileByEmail(email as string);
+        
+        if (!userProfile || !allowedRoles.includes(userProfile.role)) {
+          return res.status(403).json({ message: "Insufficient permissions" });
+        }
+        
+        // Attach user context to request
+        req.userContext = {
+          ...userProfile,
+          canAccessAllColleges: userProfile.role === 'admin' || userProfile.role === 'master_trainer'
+        };
+        
+        next();
+      } catch (error) {
+        console.error("Error enforcing data isolation:", error);
+        res.status(500).json({ message: "Authorization failed" });
+      }
+    };
+  };
+
   // Seed database endpoint
   app.post("/api/seed", async (req, res) => {
     try {
